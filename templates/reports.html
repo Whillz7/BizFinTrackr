@@ -1,0 +1,154 @@
+{% extends "auth_base.html" %}
+
+{% block title %}Business Reports{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2 class="mb-4">Business Reports</h2>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <div class="card p-4 mb-4">
+        <h4 class="mb-3">Filter Reports by Date</h4>
+        <form method="POST" class="row g-3 align-items-end">
+            <div class="col-md-4">
+                <label for="start_date" class="form-label">Start Date:</label>
+                <input type="date" class="form-control" id="start_date" name="start_date" value="{{ start_date_form }}">
+            </div>
+            <div class="col-md-4">
+                <label for="end_date" class="form-label">End Date:</label>
+                <input type="date" class="form-control" id="end_date" name="end_date" value="{{ end_date_form }}">
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-primary w-100">Apply Filter</button>
+            </div>
+            <div class="col-md-2">
+                <a href="{{ url_for('reports') }}" class="btn btn-outline-secondary w-100">Clear Filter</a>
+            </div>
+        </form>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-md-4 mb-3">
+            <div class="card text-white bg-success">
+                <div class="card-body">
+                    <h5 class="card-title">Total Revenue</h5>
+                    <p class="card-text fs-3">${{ "%.2f"|format(total_revenue) }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 mb-3">
+            <div class="card text-white bg-info">
+                <div class="card-body">
+                    <h5 class="card-title">Gross Profit</h5>
+                    <p class="card-text fs-3">${{ "%.2f"|format(gross_profit) }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 mb-3">
+            <div class="card text-white bg-danger">
+                <div class="card-body">
+                    <h5 class="card-title">Total Expenses</h5>
+                    <p class="card-text fs-3">${{ "%.2f"|format(total_expenses) }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 mb-3">
+            <div class="card text-white bg-primary">
+                <div class="card-body">
+                    <h5 class="card-title">Net Profit</h5>
+                    <p class="card-text fs-3">${{ "%.2f"|format(net_profit) }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 mb-3">
+            <div class="card text-white {% if net_profit_percentage >= 0 %}bg-success{% else %}bg-danger{% endif %}">
+                <div class="card-body">
+                    <h5 class="card-title">Net Profit Percentage</h5>
+                    <p class="card-text fs-3">{{ "%.2f"|format(net_profit_percentage) }}%</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-6 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Sales by Product</h5>
+                </div>
+                <div class="card-body">
+                    {% if sales_by_product %}
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Product Name</th>
+                                    <th>Quantity Sold</th>
+                                    <th>Revenue</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for product_sale in sales_by_product %}
+                                <tr>
+                                    <td>{{ product_sale.product_name }}</td>
+                                    <td>{{ product_sale.quantity_sold }}</td>
+                                    <td>${{ "%.2f"|format(product_sale.revenue) }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-muted">No product sales data for the selected period.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Expenses by Category</h5>
+                </div>
+                <div class="card-body">
+                    {% if expenses_by_category %}
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Category</th>
+                                    <th>Total Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for expense_cat in expenses_by_category %}
+                                <tr>
+                                    <td>{{ expense_cat.category }}</td>
+                                    <td>${{ "%.2f"|format(expense_cat.total_amount) }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-muted">No expenses recorded for the selected period.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="d-grid gap-2">
+        <button class="btn btn-outline-dark" disabled title="Download functionality coming soon!">
+            <i class="fas fa-download me-2"></i> Download Reports (Coming Soon)
+        </button>
+    </div>
+
+</div>
+{% endblock %}

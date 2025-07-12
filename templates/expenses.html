@@ -1,0 +1,34 @@
+{% extends "auth_base.html" %}
+{% block title %}Expenses Records{% endblock %}
+{% block content %}
+<h1 class="mb-4">Expenses Records</h1>
+<a href="{{ url_for('add_expense') }}" class="btn btn-success mb-3">Add New Expense</a>
+
+{% if expenses %}
+<div class="table-responsive">
+    <table class="table table-striped table-hover">
+        <thead class="thead-dark">
+            <tr>
+                <th>Description</th>
+                <th>Amount</th>
+                <th>Category</th>
+                <th>Date</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for expense in expenses %}
+            <tr>
+                <td>{{ expense.description }}</td>
+                <td>${{ "%.2f"|format(expense.amount) }}</td>
+                <td>{{ expense.category }}</td>
+                <td>{{ expense.expense_date.strftime('%Y-%m-%d') }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<p>No expenses recorded yet. Click "Add New Expense" to add one.</p>
+{% endif %}
+
+{% endblock %}

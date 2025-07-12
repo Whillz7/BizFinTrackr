@@ -1,0 +1,36 @@
+{% extends "auth_base.html" %}
+
+{% block title %}Sell Product{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2 class="mb-4">Sell Product: {{ product.name }}</h2>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <div class="card p-4">
+        <p><strong>Current Stock:</strong> {{ current_stock }}</p>
+        <p><strong>Default Selling Price:</strong> ${{ "%.2f"|format(product.price) }}</p>
+
+        <form method="POST">
+            <div class="mb-3">
+                <label for="quantity" class="form-label">Quantity to Sell:</label>
+                <input type="number" class="form-control" id="quantity" name="quantity" min="1" max="{{ current_stock }}" required autofocus>
+            </div>
+            <div class="mb-3">
+                <label for="sale_price" class="form-label">Actual Sale Price (per unit) ($):</label>
+                <input type="number" step="0.01" class="form-control" id="sale_price" name="sale_price" value="{{ "%.2f"|format(product.price) }}" min="0.01" required>
+                <small class="form-text text-muted">Enter the price at which this product is actually being sold. Default is the product's listed selling price.</small>
+            </div>
+            <button type="submit" class="btn btn-success">Record Sale</button>
+            <a href="{{ url_for('products') }}" class="btn btn-secondary">Cancel</a>
+        </form>
+    </div>
+</div>
+{% endblock %}

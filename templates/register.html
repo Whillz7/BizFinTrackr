@@ -1,0 +1,45 @@
+{% extends "public_base.html" %}
+
+{% block title %}Register Business{% endblock %}
+
+{% block content %}
+<div class="container d-flex justify-content-center align-items-center" style="min-height: 80vh;">
+    <div class="card shadow p-4" style="width: 100%; max-width: 400px;">
+        <h2 class="card-title text-center mb-4">Register Your Business</h2>
+
+        {# This section for flash messages is handled in base.html #}
+        {#
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        #}
+
+        <form method="POST" action="{{ url_for('register') }}">
+            <div class="mb-3">
+                <label for="business_name" class="form-label">Business Name</label>
+                <input type="text" class="form-control" id="business_name" name="business_name" required autofocus>
+            </div>
+            <div class="mb-3">
+                <label for="username" class="form-label">Owner Username</label>
+                <input type="text" class="form-control" id="username" name="username" required>
+            </div>
+            <div class="mb-3">
+                <label for="email" class="form-label">Email Address (for Owner)</label>
+                <input type="email" class="form-control" id="email" name="email" required>
+            </div>
+            <div class="mb-3">
+                <label for="password" class="form-label">Password</label>
+                <input type="password" class="form-control" id="password" name="password" required>
+            </div>
+            <button type="submit" class="btn btn-primary w-100">Register</button>
+        </form>
+        <small class="text-center mt-3">
+            Already have an account? <a href="{{ url_for('login') }}">Login here</a>
+        </small>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,38 @@
+{% extends "auth_base.html" %}
+{% block title %}Add New Expense{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card mt-5">
+            <div class="card-body">
+                <h2 class="mb-4 text-center">Add New Expense</h2>
+                <form action="{{ url_for('add_expense') }}" method="POST">
+                    <div class="form-group">
+                        <label for="description">Description:</label>
+                        <input type="text" class="form-control" id="description" name="description" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="amount">Amount ($):</label>
+                        <input type="number" class="form-control" id="amount" name="amount" step="0.01" min="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="category">Category:</label>
+                        <select class="form-control" id="category" name="category" required>
+                            <option value="">-- Select a category --</option>
+                            <option value="Rent">Rent</option>
+                            <option value="Utilities">Utilities</option>
+                            <option value="Salaries">Salaries</option>
+                            <option value="Supplies">Supplies</option>
+                            <option value="Marketing">Marketing</option>
+                            <option value="Maintenance">Maintenance</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Add Expense</button>
+                    <a href="{{ url_for('expenses') }}" class="btn btn-secondary">Cancel</a>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

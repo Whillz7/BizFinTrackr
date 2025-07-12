@@ -1,0 +1,59 @@
+{% extends "auth_base.html" %}
+
+{% block title %}Record New Sale{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2 class="mb-4">Record New Sale</h2>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <div class="card p-4">
+        <form method="POST">
+            <div class="mb-3">
+                <label for="product_id" class="form-label">Select Product:</label>
+                <select class="form-select" id="product_id" name="product_id" required>
+                    <option value="">-- Select a Product --</option>
+                    {% for product in products %}
+                        <option value="{{ product.id }}" data-price="{{ "%.2f"|format(product.price) }}">{{ product.name }} (Stock: {{ product.in_stock }}) - ${{ "%.2f"|format(product.price) }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="mb-3">
+                <label for="quantity_sold" class="form-label">Quantity Sold:</label>
+                <input type="number" class="form-control" id="quantity_sold" name="quantity_sold" min="1" required>
+            </div>
+            <div class="mb-3">
+                <label for="sale_price" class="form-label">Actual Sale Price (per unit) ($):</label>
+                <input type="number" step="0.01" class="form-control" id="sale_price" name="sale_price" min="0.01" required>
+                <small class="form-text text-muted">Enter the price at which this product is actually being sold. This defaults to the product's listed selling price once a product is selected.</small>
+            </div>
+            <button type="submit" class="btn btn-primary">Record Sale</button>
+            <a href="{{ url_for('sales') }}" class="btn btn-secondary">Cancel</a>
+        </form>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const productIdSelect = document.getElementById('product_id');
+        const salePriceInput = document.getElementById('sale_price');
+
+        productIdSelect.addEventListener('change', function() {
+            const selectedOption = productIdSelect.options[productIdSelect.selectedIndex];
+            const defaultPrice = selectedOption.getAttribute('data-price');
+            if (defaultPrice) {
+                salePriceInput.value = defaultPrice;
+            } else {
+                salePriceInput.value = '';
+            }
+        });
+    });
+</script>
+{% endblock %}

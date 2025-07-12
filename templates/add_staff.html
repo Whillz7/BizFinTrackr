@@ -1,0 +1,32 @@
+{% extends "auth_base.html" %}
+{% block title %}Add Staff{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card mt-5">
+            <div class="card-body">
+                <h2 class="card-title text-center mb-4">Add New Staff Member</h2>
+                <p class="text-center text-muted">Current staff: {{ current_staff_count }} / {{ staff_limit }}</p>
+                
+                {% if current_staff_count >= staff_limit %}
+                <div class="alert alert-warning text-center" role="alert">
+                    You have reached the maximum number of staff members for your business ({{ staff_limit }}).
+                </div>
+                {% endif %}
+
+                <form method="POST" action="{{ url_for('add_staff') }}">
+                    <div class="form-group">
+                        <label for="username">Staff Username:</label>
+                        <input type="text" class="form-control" id="username" name="username" required {% if current_staff_count >= staff_limit %}disabled{% endif %}>
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Staff Password:</label>
+                        <input type="password" class="form-control" id="password" name="password" required {% if current_staff_count >= staff_limit %}disabled{% endif %}>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block" {% if current_staff_count >= staff_limit %}disabled{% endif %}>Add Staff</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

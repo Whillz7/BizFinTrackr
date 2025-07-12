@@ -1,0 +1,33 @@
+{% extends "public_base.html" %}
+
+{% block title %}Welcome to BizFinTrackr{% endblock %}
+
+{% block content %}
+<div class="container text-center d-flex flex-column justify-content-center align-items-center" style="min-height: 85vh;">
+    <h1 class="display-3 mb-4">Welcome to BizFinTrackr!</h1>
+    <p class="lead mb-5">Your ultimate solution for seamless business management.</p>
+
+    <div class="row g-3 justify-content-center">
+        <div class="col-md-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Get Started</h5>
+                    <p class="card-text">Register your business or log in to manage your products, sales, and expenses.</p>
+                    <a href="{{ url_for('register') }}" class="btn btn-success w-100 mb-2">Register Your Business</a>
+                    <a href="{{ url_for('login') }}" class="btn btn-primary w-100">Login to Your Account</a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Download Our App</h5>
+                    <p class="card-text">Experience BizFinTrackr on the go with our mobile application.</p>
+                    <button class="btn btn-secondary w-100" disabled>Download for Android (Coming Soon)</button>
+                    <button class="btn btn-secondary w-100 mt-2" disabled>Download for iOS (Coming Soon)</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

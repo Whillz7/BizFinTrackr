@@ -1,0 +1,76 @@
+{% extends "auth_base.html" %}
+
+{% block title %}Products{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="display-5">Product List</h1>
+        <div>
+            <a href="{{ url_for('add_product') }}" class="btn btn-primary">Add New Product</a>
+        </div>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="mb-3">
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+
+    <div class="mb-4">
+        <form method="GET" action="{{ url_for('products') }}" class="input-group">
+            <input type="text" class="form-control" placeholder="Search by Product Name or ID..." name="search" value="{{ search_query }}">
+            <button class="btn btn-outline-secondary" type="submit">Search</button>
+            {% if search_query %}
+            <a href="{{ url_for('products') }}" class="btn btn-outline-danger">Clear Search</a>
+            {% endif %}
+        </form>
+    </div>
+
+    {% if product_data %}
+        <div class="table-responsive">
+            <table class="table table-hover table-striped">
+                <thead>
+                    <tr>
+                        <th>Name</th> {# Product ID column removed #}
+                        <th>Selling Price</th>
+                        <th>Cost Price</th>
+                        <th>In Stock</th>
+                        <th>Sold</th> {# Changed from Total Sold (Overall) to Sold #}
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in product_data %}
+                    <tr>
+                        <td>
+                            {{ item.product.name }}
+                            <div class="text-muted small">{{ item.product.custom_id if item.product.custom_id else item.product.id }}</div>
+                        </td> {# Product ID moved here, faded and smaller #}
+                        <td>${{ '%.2f' % item.product.price }}</td>
+                        <td>${{ '%.2f' % item.product.cost }}</td>
+                        <td>{{ item.in_stock }}</td>
+                        <td>{{ item.total_sold }}</td> {# Retained item.total_sold for data #}
+                        <td>
+                            <a href="{{ url_for('restock_product', product_id=item.product.id) }}" class="btn btn-sm btn-info me-1">Restock</a>
+                            <a href="{{ url_for('sell_product', product_id=item.product.id) }}" class="btn btn-sm btn-success me-1">Sell</a>
+                            {% if session.get('role') == 'owner' %}
+                            <form action="{{ url_for('delete_product', product_id=item.product.id) }}" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to delete this product? This will also remove associated sales and inventory records.');">
+                                <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                            </form>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <p class="text-muted">No products found. Add some to get started!</p>
+    {% endif %}
+</div>
+{% endblock %}

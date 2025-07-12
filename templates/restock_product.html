@@ -1,0 +1,24 @@
+{% extends "auth_base.html" %}
+{% block title %}Restock Product{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card mt-5">
+            <div class="card-body">
+                <h2 class="card-title text-center mb-4">Restock Product</h2>
+                <h5 class="text-center mb-3">Product: <strong>{{ product.name }}</strong></h5>
+                <p class="text-center">Current Stock: <strong>{{ current_stock }}</strong> units</p>
+                
+                <form action="{{ url_for('restock_product', product_id=product.id) }}" method="POST">
+                    <div class="form-group">
+                        <label for="quantity">Quantity to Add:</label>
+                        <input type="number" class="form-control" id="quantity" name="quantity" min="1" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Restock</button>
+                    <a href="{{ url_for('products') }}" class="btn btn-secondary">Cancel</a>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

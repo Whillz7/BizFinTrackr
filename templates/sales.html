@@ -1,0 +1,59 @@
+{% extends "auth_base.html" %}
+
+{% block title %}Sales List{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2 class="mb-4">Sales Records</h2>
+
+    {# Flash messages block is now handled in base.html, so it's removed here #}
+
+    <div class="d-flex justify-content-end mb-3">
+        <a href="{{ url_for('record_sale') }}" class="btn btn-primary">Record New Sale</a>
+    </div>
+
+    {% if sales %}
+    <div class="table-responsive">
+        <table class="table table-striped table-hover">
+            <thead>
+                <tr>
+                    <th>Product Name / ID</th> {# Updated header #}
+                    <th>Quantity Sold</th>
+                    <th>Sale Price</th>
+                    <th>Total</th>
+                    <th>Date & Time</th>
+                    <th>Staff</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sale in sales %}
+                <tr>
+                    <td>
+                        {{ sale.product.name }}
+                        {% if sale.product.custom_id %} {# Corrected to sale.product.custom_id #}
+                            <small class="text-muted d-block" style="font-size: 0.8em;">ID: {{ sale.product.custom_id }}</small>
+                        {% endif %}
+                    </td>
+                    <td>{{ sale.quantity_sold }}</td>
+                    <td>${{ "%.2f"|format(sale.sale_price) }}</td>
+                    <td>${{ "%.2f"|format(sale.quantity_sold * sale.sale_price) }}</td> {# Calculate Total #}
+                    <td>{{ sale.sale_date.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                    <td>{{ sale.staff_user.username if sale.staff_user else 'N/A' }}</td>
+                    <td>
+                        {# Currently no direct edit/delete for sales in your app, but good to keep structure for future #}
+                        <button class="btn btn-sm btn-info" disabled title="View Sale Details (Not yet implemented)">View</button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="alert alert-info">
+        No sales recorded yet.
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}
