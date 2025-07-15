@@ -181,12 +181,12 @@ def register():
             flash('All fields are required to register as a Business Owner.', 'danger')
             return render_template('register.html', now=datetime.datetime.utcnow())
 
-        existing_owner_email = User.query.filter_by(email=email, role='owner').first()
+        existing_owner_email = User.query.filter(func.lower(User.email) == func.lower(email), User.role == 'owner').first()
         if existing_owner_email:
             flash('This email is already registered to an owner. Please log in or use a different email.', 'danger')
             return render_template('register.html', now=datetime.datetime.utcnow())
 
-        existing_business = Business.query.filter_by(name=business_name).first()
+        existing_business = Business.query.filter(func.lower(Business.name) == func.lower(business_name)).first()
         if existing_business:
             flash('A business with this name already exists. Please choose a different name.', 'danger')
             return render_template('register.html', now=datetime.datetime.utcnow())
@@ -196,24 +196,29 @@ def register():
 
         try:
             db.session.add(new_owner)
-            db.session.commit()
-            
+            db.session.flush()  # To get new_owner.id before commit
+
+            # Create the business and assign owner
             new_business = Business(name=business_name, owner_id=new_owner.id)
             db.session.add(new_business)
-            db.session.flush() # Assigns an ID to new_business without committing to the DB yet
+            db.session.flush()  # To get new_business.id before commit
 
-            # --- MODIFIED: Generate Business Code as per new format ---
+            # ✅ Generate Business Code in format: BFT/YYMM/F0001
             now_dt = datetime.datetime.utcnow()
-            year_month_suffix = now_dt.strftime('%y%m') # Last two digits of year and month
-            business_number = str(new_business.id).zfill(4) # Auto-incremented Business ID, 4 digits
+            year_month = now_dt.strftime('%y%m')  # e.g., 2507
+            first_letter = business_name[0].upper()
+            padded_id = str(new_business.id).zfill(4)
+            business_code = f'BFT/{year_month}/{first_letter}{padded_id}'
 
-            new_business.business_code_prefix = f'BC/{year_month_suffix}/{business_number}'
-            
+            # Assign business code and update user
+            new_business.business_code_prefix = business_code
             new_owner.business_id = new_business.id
-            db.session.commit() # Now commit everything
 
-            flash(f'Business "{business_name}" registered successfully! Your Business Code is: {new_business.business_code_prefix}. You can now log in.', 'success')
+            db.session.commit()
+
+            flash(f'Business "{business_name}" registered successfully! Your Business Code is: {business_code}. You can now log in.', 'success')
             return redirect(url_for('login'))
+
         except Exception as e:
             db.session.rollback()
             flash(f'An error occurred during registration: {e}', 'danger')
