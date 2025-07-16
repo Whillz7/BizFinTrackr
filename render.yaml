@@ -7,4 +7,3 @@ services:
     envVars:
       - key: DATABASE_URL
         sync: false
-    pythonVersion: 3.11.9
