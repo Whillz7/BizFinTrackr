@@ -1,8 +1,0 @@
-services:
-  - type: web
-    name: bizfintrackr
-    env: python
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "gunicorn BizFinTrackr:app"
-    runtime: python
-    pythonVersion: 3.11.9
