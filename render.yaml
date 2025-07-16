@@ -1,8 +1,10 @@
 services:
   - type: web
     name: bizfintrackr
-    env: python
+    runtime: python
     buildCommand: "pip install -r requirements.txt"
     startCommand: "gunicorn BizFinTrackr:app"
-    runtime: python
+    envVars:
+      - key: DATABASE_URL
+        sync: false
     pythonVersion: 3.11.9
