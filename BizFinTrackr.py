@@ -11,7 +11,12 @@ from werkzeug.security import check_password_hash, generate_password_hash
 app = Flask(__name__)
 
 # --- Configuration ---
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
+db_url = os.environ.get('DATABASE_URL')
+
+if db_url and db_url.startswith("postgres://"):
+    db_url = db_url.replace("postgres://", "postgresql://", 1)
+
+app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = 'a_very_secret_and_long_random_key_for_biztrack_pro_v6_main_screens' # IMPORTANT: CHANGE THIS IN PRODUCTION!
 db = SQLAlchemy(app)
