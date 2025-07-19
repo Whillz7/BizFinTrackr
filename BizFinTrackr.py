@@ -26,25 +26,9 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 # --- Database Models ---
 
-class Business(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), unique=True, nullable=False)
-    owner_id = db.Column(db.Integer, db.ForeignKey('user.id'), unique=True, nullable=False)
-    business_code_prefix = db.Column(db.String(100), unique=True, nullable=True) # e.g., 'BC/2506/D0001'
-
-    staff = db.relationship('User', backref='business', lazy=True, primaryjoin="Business.id == User.business_id")
-    products = db.relationship('Product', backref='business', lazy=True)
-    sales = db.relationship('Sale', backref='business', lazy=True)
-    expenses = db.relationship('Expense', backref='business', lazy=True)
-
-
-    def __repr__(self):
-        return f"Business('{self.name}', ID: {self.id}, Code: {self.business_code_prefix})"
-
-    # Removed the property business_code since we're now storing a generated prefix directly
-
-
 class User(db.Model):
+    __tablename__ = 'user'
+
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(20), unique=False, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=True) # Unique for owners, can be None for staff
@@ -78,6 +62,23 @@ class User(db.Model):
         if self.id is not None:
             return str(self.id).zfill(2)[-2:]
         return 'YY' # Fallback for when ID is not yet assigned
+
+
+class Business(db.Model):
+    __tablename__ = 'business'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False)
+    owner_id = db.Column(db.Integer, db.ForeignKey('user.id'), unique=True, nullable=False)
+    business_code_prefix = db.Column(db.String(100), unique=True, nullable=True) # e.g., 'BC/2506/D0001'
+
+    staff = db.relationship('User', backref='business', lazy=True, primaryjoin="Business.id == User.business_id")
+    products = db.relationship('Product', backref='business', lazy=True)
+    sales = db.relationship('Sale', backref='business', lazy=True)
+    expenses = db.relationship('Expense', backref='business', lazy=True)
+
+    def __repr__(self):
+        return f"Business('{self.name}', ID: {self.id}, Code: {self.business_code_prefix})"
 
 
 class Product(db.Model):
