@@ -27,6 +27,8 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 # --- Database Models ---
 
 class Business(db.Model):
+    with app.app_context():
+        db.create_all()
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False)
     owner_id = db.Column(db.Integer, db.ForeignKey('user.id'), unique=True, nullable=False)
@@ -45,6 +47,8 @@ class Business(db.Model):
 
 
 class User(db.Model):
+    with app.app_context():
+        db.create_all()
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(20), unique=False, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=True) # Unique for owners, can be None for staff
@@ -162,11 +166,14 @@ def role_required(role):
         return decorated_function
     return decorator
 
-
+with app.app_context():
+        db.create_all()
 # --- Routes ---
 
 @app.route('/')
 def home():
+    with app.app_context():
+        db.create_all()
     # --- MODIFIED: Redirect to the new landing page ---
     return redirect(url_for('landing'))
 
@@ -1168,6 +1175,4 @@ def reports():
 
 # --- Run the Application ---
 if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
     app.run(debug=True)
