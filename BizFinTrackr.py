@@ -66,7 +66,12 @@ class Business(db.Model):
     name = db.Column(db.String(100), unique=True, nullable=False)
     owner_id = db.Column(db.Integer, db.ForeignKey('users.id'), unique=True, nullable=False)
     business_code_prefix = db.Column(db.String(100), unique=True, nullable=True) # e.g., 'BC/2506/D0001'
-    users = db.relationship('User', backref='business', lazy=True)
+    users = db.relationship(
+    'User',
+    backref='business',
+    lazy=True,
+    foreign_keys='User.business_id'
+)
     staff = db.relationship('user', backref='business', lazy=True, primaryjoin="Business.id == Users.business_id")
     products = db.relationship('Product', backref='business', lazy=True)
     sales = db.relationship('Sale', backref='business', lazy=True)
