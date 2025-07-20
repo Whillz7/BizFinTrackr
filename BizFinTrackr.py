@@ -27,21 +27,19 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 # --- Database Models ---
 
 class User(db.Model):
-    __tablename__ = 'user'
+    __tablename__ = 'users'  # <-- Add this line to avoid using the reserved 'user' keyword
 
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(20), unique=False, nullable=False)
-    email = db.Column(db.String(120), unique=True, nullable=True) # Unique for owners, can be None for staff
+    email = db.Column(db.String(120), unique=True, nullable=True)
     password_hash = db.Column(db.String(128), nullable=False)
-    role = db.Column(db.String(10), nullable=False) # 'owner' or 'staff'
-    business_id = db.Column(db.Integer, db.ForeignKey('business.id'), nullable=True) # Null for an owner until business is created
+    role = db.Column(db.String(10), nullable=False)
+    business_id = db.Column(db.Integer, db.ForeignKey('business.id'), nullable=True)
 
-    # Ensure username is unique per business
     __table_args__ = (db.UniqueConstraint('username', 'business_id', name='_username_business_uc'),)
 
     owned_business = db.relationship('Business', backref='owner_user', lazy=True, uselist=False,
                                      primaryjoin="User.id == Business.owner_id")
-
     sales = db.relationship('Sale', backref='staff_user', lazy=True)
     expenses = db.relationship('Expense', backref='staff_user', lazy=True)
     inventory_updates = db.relationship('Inventory', backref='staff_user', lazy=True)
@@ -57,12 +55,9 @@ class User(db.Model):
 
     @property
     def staff_code(self):
-        # Returns last two digits, padded with '0' if less than 10
-        # Ensure 'id' is not None before trying to format
         if self.id is not None:
             return str(self.id).zfill(2)[-2:]
-        return 'YY' # Fallback for when ID is not yet assigned
-
+        return 'YY'
 
 class Business(db.Model):
     __tablename__ = 'business'
