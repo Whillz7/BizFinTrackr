@@ -66,8 +66,8 @@ class Business(db.Model):
     name = db.Column(db.String(100), unique=True, nullable=False)
     owner_id = db.Column(db.Integer, db.ForeignKey('users.id'), unique=True, nullable=False)
     business_code_prefix = db.Column(db.String(100), unique=True, nullable=True) # e.g., 'BC/2506/D0001'
-
-    staff = db.relationship('users', backref='business', lazy=True, primaryjoin="Business.id == Users.business_id")
+    users = db.relationship('User', backref='business', lazy=True)
+    staff = db.relationship('user', backref='business', lazy=True, primaryjoin="Business.id == Users.business_id")
     products = db.relationship('Product', backref='business', lazy=True)
     sales = db.relationship('Sale', backref='business', lazy=True)
     expenses = db.relationship('Expense', backref='business', lazy=True)
@@ -827,7 +827,7 @@ def profile():
     if user.role == 'owner' and business:
         staff_members = User.query.filter_by(business_id=business.id).filter(User.role=='staff').all()
     
-    return render_template('profile.html', users=user, business=business, staff_members=staff_members, now=datetime.datetime.utcnow())
+    return render_template('profile.html', user=user, business=business, staff_members=staff_members, now=datetime.datetime.utcnow())
 
 
 @app.route('/edit_profile', methods=['GET', 'POST'])
@@ -840,17 +840,17 @@ def edit_profile():
 
         if not new_username:
             flash('Username cannot be empty.', 'danger')
-            return render_template('edit_profile.html', users=user, now=datetime.datetime.utcnow())
+            return render_template('edit_profile.html', user=user, now=datetime.datetime.utcnow())
         
         if user.role == 'owner':
             if not new_email:
                 flash('Email cannot be empty for owner accounts.', 'danger')
-                return render_template('edit_profile.html', users=user, now=datetime.datetime.utcnow())
+                return render_template('edit_profile.html', user=user, now=datetime.datetime.utcnow())
             
             existing_email_user = User.query.filter(User.email == new_email, User.id != user.id, User.role == 'owner').first()
             if existing_email_user:
                 flash('This email is already taken by another owner.', 'danger')
-                return render_template('edit_profile.html', users=user, now=datetime.datetime.utcnow())
+                return render_template('edit_profile.html', user=user, now=datetime.datetime.utcnow())
         
         if user.role == 'owner':
             existing_username_owner = User.query.filter(
@@ -860,7 +860,7 @@ def edit_profile():
             ).first()
             if existing_username_owner:
                 flash('This username is already taken by another owner.', 'danger')
-                return render_template('edit_profile.html', users=user, now=datetime.datetime.utcnow())
+                return render_template('edit_profile.html', user=user, now=datetime.datetime.utcnow())
         elif user.role == 'staff':
              existing_username_staff = User.query.filter(
                 User.username == new_username, 
@@ -869,7 +869,7 @@ def edit_profile():
             ).first()
              if existing_username_staff:
                 flash('This username is already taken by another staff member in your business.', 'danger')
-                return render_template('edit_profile.html', users=user, now=datetime.datetime.utcnow())
+                return render_template('edit_profile.html', user=user, now=datetime.datetime.utcnow())
 
 
         user.username = new_username
@@ -886,7 +886,7 @@ def edit_profile():
             db.session.rollback()
             flash(f'An error occurred while updating your profile: {e}', 'danger')
 
-    return render_template('edit_profile.html', users=user, now=datetime.datetime.utcnow())
+    return render_template('edit_profile.html', user=user, now=datetime.datetime.utcnow())
 
 
 @app.route('/change_password', methods=['GET', 'POST'])
@@ -948,12 +948,12 @@ def add_staff():
 
         if not username or not password:
             flash('Username and password are required for staff registration.', 'danger')
-            return render_template('add_staff.html', current_staff_count=current_staff_count, staff_limit=STAFF_LIMIT_PER_BUSINESS, owner_users=owner_user, now=datetime.datetime.utcnow())
+            return render_template('add_staff.html', current_staff_count=current_staff_count, staff_limit=STAFF_LIMIT_PER_BUSINESS, owner_user=owner_user, now=datetime.datetime.utcnow())
 
         existing_staff = User.query.filter_by(username=username, business_id=owner_business.id, role='staff').first()
         if existing_staff:
             flash('Username already exists for a staff member in your business. Please choose a different one.', 'danger')
-            return render_template('add_staff.html', current_staff_count=current_staff_count, staff_limit=STAFF_LIMIT_PER_BUSINESS, owner_users=owner_user, now=datetime.datetime.utcnow())
+            return render_template('add_staff.html', current_staff_count=current_staff_count, staff_limit=STAFF_LIMIT_PER_BUSINESS, owner_user=owner_user, now=datetime.datetime.utcnow())
         
         if current_staff_count >= STAFF_LIMIT_PER_BUSINESS:
             flash(f'You have reached the maximum of {STAFF_LIMIT_PER_BUSINESS} staff members for your business.', 'danger')
@@ -973,13 +973,13 @@ def add_staff():
             db.session.commit()
             flash(f'Staff member "{username}" added successfully to {owner_business.name}!', 'success')
             current_staff_count = User.query.filter_by(business_id=owner_business.id, role='staff').count() 
-            return render_template('add_staff.html', current_staff_count=current_staff_count, staff_limit=STAFF_LIMIT_PER_BUSINESS, owner_users=owner_user, now=datetime.datetime.utcnow())
+            return render_template('add_staff.html', current_staff_count=current_staff_count, staff_limit=STAFF_LIMIT_PER_BUSINESS, owner_user=owner_user, now=datetime.datetime.utcnow())
         except Exception as e:
             db.session.rollback()
             flash(f'An error occurred: {e}', 'danger')
             app.logger.error(f"Error adding staff: {e}")
 
-    return render_template('add_staff.html', current_staff_count=current_staff_count, staff_limit=STAFF_LIMIT_PER_BUSINESS, owner_users=owner_user, now=datetime.datetime.utcnow())
+    return render_template('add_staff.html', current_staff_count=current_staff_count, staff_limit=STAFF_LIMIT_PER_BUSINESS, owner_user=owner_user, now=datetime.datetime.utcnow())
 
 
 @app.route('/edit_staff/<int:staff_id>', methods=['GET', 'POST'])
@@ -1065,7 +1065,7 @@ def delete_staff(staff_id):
 @app.route('/reports', methods=['GET', 'POST'])
 @role_required('owner') 
 def reports():
-    users_business_id = session.get('business_id')
+    user_business_id = session.get('business_id')
 
     # Default date range for reports
     start_date_filter = datetime.datetime.min
@@ -1103,7 +1103,7 @@ def init_db():
 
     # --- General Financial Metrics ---
     sales_in_range = Sale.query.filter(
-        Sale.business_id == users_business_id,
+        Sale.business_id == user_business_id,
         Sale.sale_date >= start_date_filter,
         Sale.sale_date <= end_date_filter
     ).all()
@@ -1112,7 +1112,7 @@ def init_db():
     gross_profit = total_revenue - total_cost_of_goods_sold
     
     expenses_in_range = Expense.query.filter(
-        Expense.business_id == users_business_id,
+        Expense.business_id == user_business_id,
         Expense.expense_date >= start_date_filter,
         Expense.expense_date <= end_date_filter
     ).all()
@@ -1132,7 +1132,7 @@ def init_db():
         func.sum(Sale.quantity_sold).label('total_quantity_sold'),
         func.sum(Sale.quantity_sold * Sale.sale_price).label('total_revenue_from_product')
     ).join(Sale).filter(
-        Sale.business_id == users_business_id,
+        Sale.business_id == user_business_id,
         Sale.sale_date >= start_date_filter,
         Sale.sale_date <= end_date_filter
     ).group_by(Product.name).order_by(func.sum(Sale.quantity_sold).desc()).all()
@@ -1145,7 +1145,7 @@ def init_db():
         Expense.category,
         func.sum(Expense.amount).label('total_amount')
     ).filter(
-        Expense.business_id == users_business_id,
+        Expense.business_id == user_business_id,
         Expense.expense_date >= start_date_filter,
         Expense.expense_date <= end_date_filter
     ).group_by(Expense.category).order_by(func.sum(Expense.amount).desc()).all()
