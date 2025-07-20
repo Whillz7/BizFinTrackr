@@ -72,6 +72,7 @@ class Business(db.Model):
     lazy=True,
     foreign_keys='User.business_id'
 )
+
     staff = db.relationship('user', backref='business', lazy=True, primaryjoin="Business.id == Users.business_id")
     products = db.relationship('Product', backref='business', lazy=True)
     sales = db.relationship('Sale', backref='business', lazy=True)
