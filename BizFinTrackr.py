@@ -1096,6 +1096,11 @@ def reports():
             start_date_filter = datetime.datetime.min
             end_date_filter = datetime.datetime.utcnow()
 
+@app.route('/init-db')
+def init_db():
+    with app.app_context():
+        db.create_all()
+    return "Database tables created!"
 
     # --- General Financial Metrics ---
     sales_in_range = Sale.query.filter(
