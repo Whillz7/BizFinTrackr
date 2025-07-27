@@ -18,19 +18,7 @@ db_url = os.environ.get('DATABASE_URL')
 if db_url and db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
 
-# Force IPv4 address resolution
-addr = socket.gethostbyname('db.tsyalxhkmmvindwxzrhc.supabase.co')
-
-conn = psycopg2.connect(
-    host=addr,
-    port=5432,
-    dbname='postgres',
-    user='your_user',
-    password='your_password',
-    sslmode='require'
-)
-
-app.config['SQLALCHEMY_DATABASE_URI'] = db_url
+app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:MrWhizDeveloper321@db.tsyalxhkmmvindwxzrhc.supabase.co:5432/postgres?sslmode=require&connect_timeout=10'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = 'a_very_secret_and_long_random_key_for_biztrack_pro_v6_main_screens' # IMPORTANT: CHANGE THIS IN PRODUCTION!
 db = SQLAlchemy(app)
