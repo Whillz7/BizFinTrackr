@@ -98,7 +98,7 @@
                                 {% for product_sale in sales_by_product %}
                                 <tr>
                                     <td>{{ product_sale.product_name }}</td>
-                                    <td>{{ product_sale.quantity_sold }}</td>
+                                    <td>{{ product_sale.quantity }}</td>
                                     <td>${{ "%.2f"|format(product_sale.revenue) }}</td>
                                 </tr>
                                 {% endfor %}
