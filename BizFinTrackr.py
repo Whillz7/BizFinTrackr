@@ -577,12 +577,12 @@ def sell_product(product_id):
 
     if request.method == 'POST':
         quantity_to_sell = request.form.get('quantity')
-        sale_price_override = request.form.get('sale_price') # New field for actual sale price
+        sale_price_override = request.form.get('sale_price')  # User can specify sale price
 
         if not all([quantity_to_sell, sale_price_override is not None]):
             flash('Quantity and Sale Price are required.', 'danger')
             return render_template('sell_product.html', product=product, current_stock=current_stock, now=datetime.datetime.utcnow())
-        
+
         try:
             quantity_to_sell = int(quantity_to_sell)
             sale_price_override = float(sale_price_override)
@@ -602,41 +602,39 @@ def sell_product(product_id):
         if quantity_to_sell > current_stock:
             flash(f'Not enough stock. Only {current_stock} units of "{product.name}" available.', 'danger')
             return render_template('sell_product.html', product=product, current_stock=current_stock, now=datetime.datetime.utcnow())
-        
+
         try:
+            # Update product stock
             product.in_stock -= quantity_to_sell
             product.total_sold += quantity_to_sell 
-            
+
+            # ✅ Sale: No staff_id is passed
             new_sale = Sale(
                 product_id=product.id,
-                quantity=quantity_to_sell, # Changed quantity_sold to quantity
-                total_amount=sale_price_override, # Changed sale_price to total_amount
-                staff_id=session['user_id'], # Changed 'users_id' to 'user_id'
+                quantity=quantity_to_sell,
+                total_amount=sale_price_override,
                 business_id=session['business_id']
             )
             db.session.add(new_sale)
-            db.session.flush() # Assigns an ID to new_sale without committing to the DB yet
 
-            # Removed custom_id generation as it's not in the SQL schema for sale table
-            
+            # Log inventory change (still keeps staff_id)
             new_inventory_log = Inventory(
-                product_id=new_sale.product.id, 
-                quantity=-new_sale.quantity, # Changed quantity_sold to quantity
-                staff_id=session['user_id'], # Changed 'users_id' to 'user_id'
-                # Removed business_id from Inventory creation as it's not in the SQL schema
+                product_id=product.id, 
+                quantity=-quantity_to_sell,
+                staff_id=session.get('user_id')  # Optional, nullable in DB
             )
             db.session.add(new_inventory_log)
 
-            db.session.commit() # Now commit everything
-            flash(f'{quantity_to_sell} units of "{product.name}" sold successfully! Sale ID: {new_sale.id}', 'success') # Changed custom_id to id
+            db.session.commit()
+            flash(f'{quantity_to_sell} units of "{product.name}" sold successfully! Sale ID: {new_sale.id}', 'success')
             return redirect(url_for('products'))
+
         except Exception as e:
             db.session.rollback()
             flash(f'An error occurred during sale: {e}', 'danger')
             app.logger.error(f"Error selling product {product_id}: {e}")
 
     return render_template('sell_product.html', product=product, current_stock=current_stock, now=datetime.datetime.utcnow())
-
 
 @app.route('/delete_product/<int:product_id>', methods=['POST'])
 @role_required('owner') 
@@ -709,7 +707,7 @@ def record_sale():
         try:
             # Update product stock and sales count
             product.in_stock -= quantity_sold
-            product.total_sold += quantity_sold 
+            product.total_sold += quantity_sold
 
             # Prepare sale record
             sale_data = {
@@ -720,7 +718,7 @@ def record_sale():
             }
 
             if user_role == 'staff':
-                sale_data['staff_id'] = user_id  # Only set if staff
+                sale_data['staff_id'] = user_id  # Optional staff_id
 
             new_sale = Sale(**sale_data)
             db.session.add(new_sale)
@@ -733,7 +731,7 @@ def record_sale():
             }
 
             if user_role == 'staff':
-                inventory_data['staff_id'] = user_id  # Only set if staff
+                inventory_data['staff_id'] = user_id  # Optional staff_id
 
             new_inventory_log = Inventory(**inventory_data)
             db.session.add(new_inventory_log)
@@ -748,7 +746,6 @@ def record_sale():
             app.logger.error(f"Error recording sale: {e}")
 
     return render_template('record_sale.html', products=products_for_sale, now=datetime.datetime.utcnow())
-
 
 # --- Expense Records Section ---
 @app.route('/expenses')
