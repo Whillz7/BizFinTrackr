@@ -672,44 +672,6 @@ def sales():
 def record_sale():
     user_id = session.get('user_id')
     user_business_id = session.get('business_id')
-    products_for_sale = Product.query.filter_by(business_id=user_business_id).all()
-
-    if request.method == 'POST':
-        product_id = request.form.get('product_id')
-        quantity_sold = request.form.get('quantity_sold')
-        sale_price_override = request.form.get('sale_price')
-
-        if not all([product_id, quantity_sold, sale_price_override]):
-            flash('Product, Quantity, and Sale Price are required.', 'danger')
-            return render_template('record_sale.html', products=products_for_sale, now=datetime.datetime.utcnow())
-
-        try:
-            product_id = int(product_id)
-            quantity_sold = int(quantity_sold)
-            sale_price_override = float(sale_price_override)
-
-            if quantity_sold <= 0 or sale_price_override <= 0:
-                flash('Quantity and Sale Price must be positive numbers.', 'danger')
-                return render_template('record_sale.html', products=products_for_sale, now=datetime.datetime.utcnow())
-
-        except ValueError:
-            flash('Product ID, Quantity, and Sale Price must be valid numbers.', 'danger')
-            return render_template('record_sale.html', products=products_for_sale, now=datetime.datetime.utcnow())
-
-        product = Product.query.get(product_id)
-        if not product or product.business_id != user_business_id:
-            flash('Invalid product selected.', 'danger')
-            return render_template('record_sale.html', products=products_for_sale, now=datetime.datetime.utcnow())
-
-        if quantity_sold > product.in_stock:
-            flash(f'Not enough stock. Only {product.in_stock} units of "{product.name}" available.', 'danger')
-            return render_template('record_sale.html', products=products_for_sale, now=datetime.datetime.utcnow())
-
-@app.route('/record_sale', methods=['GET', 'POST'])
-@login_required 
-def record_sale():
-    user_id = session.get('user_id')
-    user_business_id = session.get('business_id')
     user_role = session.get('role')
     products_for_sale = Product.query.filter_by(business_id=user_business_id).all()
 
@@ -786,6 +748,7 @@ def record_sale():
             app.logger.error(f"Error recording sale: {e}")
 
     return render_template('record_sale.html', products=products_for_sale, now=datetime.datetime.utcnow())
+
 
 # --- Expense Records Section ---
 @app.route('/expenses')
