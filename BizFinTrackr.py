@@ -907,16 +907,17 @@ def change_password():
 @app.route('/add_staff', methods=['GET', 'POST'])
 @role_required('owner')
 def add_staff():
-    owner_user = User.query.get(session['user_id']) # Changed 'users_id' to 'user_id'
-    if owner_user and owner_user.owned_business:
-        owner_business = Business.query.get(owner_user.owned_business.id)
-    else:
+    owner_user = User.query.get(session['user_id'])
+
+    # Corrected: access the business via relationship (uselist=False ensures this is not a list)
+    owner_business = owner_user.owned_business
+    if not owner_business:
         flash("You do not have an associated business. Please contact support.", "danger")
         return redirect(url_for('dashboard'))
 
-
+    # Enforce 3-staff limit
+    STAFF_LIMIT_PER_BUSINESS = 3
     current_staff_count = User.query.filter_by(business_id=owner_business.id, role='staff').count()
-    STAFF_LIMIT_PER_BUSINESS = 5
 
     if request.method == 'POST':
         username = request.form.get('username')
@@ -926,6 +927,7 @@ def add_staff():
             flash('Username and password are required for staff registration.', 'danger')
             return render_template('add_staff.html', current_staff_count=current_staff_count, staff_limit=STAFF_LIMIT_PER_BUSINESS, owner_user=owner_user, now=datetime.datetime.utcnow())
 
+        # Check for username conflict within the business
         existing_staff = User.query.filter_by(username=username, business_id=owner_business.id, role='staff').first()
         if existing_staff:
             flash('Username already exists for a staff member in your business. Please choose a different one.', 'danger')
@@ -935,10 +937,10 @@ def add_staff():
             flash(f'You have reached the maximum of {STAFF_LIMIT_PER_BUSINESS} staff members for your business.', 'danger')
             return render_template('add_staff.html', current_staff_count=current_staff_count, staff_limit=STAFF_LIMIT_PER_BUSINESS, owner_user=owner_user, now=datetime.datetime.utcnow())
 
-
+        # Create and save new staff
         new_staff = User(
             username=username,
-            email=None, 
+            email=None,
             role='staff',
             business_id=owner_business.id
         )
@@ -948,15 +950,19 @@ def add_staff():
             db.session.add(new_staff)
             db.session.commit()
             flash(f'Staff member "{username}" added successfully to {owner_business.name}!', 'success')
-            current_staff_count = User.query.filter_by(business_id=owner_business.id, role='staff').count() 
-            return render_template('add_staff.html', current_staff_count=current_staff_count, staff_limit=STAFF_LIMIT_PER_BUSINESS, owner_user=owner_user, now=datetime.datetime.utcnow())
+            current_staff_count += 1  # Update count locally
         except Exception as e:
             db.session.rollback()
-            flash(f'An error occurred: {e}', 'danger')
+            flash(f'An error occurred while adding staff: {str(e)}', 'danger')
             app.logger.error(f"Error adding staff: {e}")
 
-    return render_template('add_staff.html', current_staff_count=current_staff_count, staff_limit=STAFF_LIMIT_PER_BUSINESS, owner_user=owner_user, now=datetime.datetime.utcnow())
-
+    return render_template(
+        'add_staff.html',
+        current_staff_count=current_staff_count,
+        staff_limit=STAFF_LIMIT_PER_BUSINESS,
+        owner_user=owner_user,
+        now=datetime.datetime.utcnow()
+    )
 
 @app.route('/edit_staff/<int:staff_id>', methods=['GET', 'POST'])
 @role_required('owner')
