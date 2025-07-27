@@ -36,7 +36,7 @@
                         {% endif %}
                     </td>
                     <td>{{ sale.quantity_sold }}</td>
-                    <td>${{ "%.2f"|format(sale.sale_price) }}</td>
+                    <td>${{ "%.2f"|format(sale.total_amount) }}</td>
                     <td>${{ "%.2f"|format(sale.quantity_sold * sale.sale_price) }}</td> {# Calculate Total #}
                     <td>{{ sale.sale_date.strftime('%Y-%m-%d %H:%M:%S') }}</td>
                     <td>{{ sale.staff_user.username if sale.staff_user else 'N/A' }}</td>
