@@ -43,6 +43,7 @@ class User(db.Model):
     sales = db.relationship('Sale', backref='staff_user', lazy=True)
     expenses = db.relationship('Expense', backref='staff_user', lazy=True)
     inventory_updates = db.relationship('Inventory', backref='staff_user', lazy=True)
+    owned_business = db.relationship('Business', backref='owner', uselist=False, lazy=True)
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
