@@ -705,37 +705,87 @@ def record_sale():
             flash(f'Not enough stock. Only {product.in_stock} units of "{product.name}" available.', 'danger')
             return render_template('record_sale.html', products=products_for_sale, now=datetime.datetime.utcnow())
 
+@app.route('/record_sale', methods=['GET', 'POST'])
+@login_required 
+def record_sale():
+    user_id = session.get('user_id')
+    user_business_id = session.get('business_id')
+    user_role = session.get('role')
+    products_for_sale = Product.query.filter_by(business_id=user_business_id).all()
+
+    if request.method == 'POST':
+        product_id = request.form.get('product_id')
+        quantity_sold = request.form.get('quantity_sold')
+        sale_price_override = request.form.get('sale_price')
+
+        if not all([product_id, quantity_sold, sale_price_override]):
+            flash('Product, Quantity, and Sale Price are required.', 'danger')
+            return render_template('record_sale.html', products=products_for_sale, now=datetime.datetime.utcnow())
+
         try:
+            product_id = int(product_id)
+            quantity_sold = int(quantity_sold)
+            sale_price_override = float(sale_price_override)
+
+            if quantity_sold <= 0 or sale_price_override <= 0:
+                flash('Quantity and Sale Price must be positive numbers.', 'danger')
+                return render_template('record_sale.html', products=products_for_sale, now=datetime.datetime.utcnow())
+
+        except ValueError:
+            flash('Product ID, Quantity, and Sale Price must be valid numbers.', 'danger')
+            return render_template('record_sale.html', products=products_for_sale, now=datetime.datetime.utcnow())
+
+        product = Product.query.get(product_id)
+        if not product or product.business_id != user_business_id:
+            flash('Invalid product selected.', 'danger')
+            return render_template('record_sale.html', products=products_for_sale, now=datetime.datetime.utcnow())
+
+        if quantity_sold > product.in_stock:
+            flash(f'Not enough stock. Only {product.in_stock} units of "{product.name}" available.', 'danger')
+            return render_template('record_sale.html', products=products_for_sale, now=datetime.datetime.utcnow())
+
+        try:
+            # Update product stock and sales count
             product.in_stock -= quantity_sold
             product.total_sold += quantity_sold 
-            
-            new_sale = Sale(
-                product_id=product.id,
-                quantity=quantity_sold,
-                total_amount=sale_price_override,
-                staff_id=user_id,
-                business_id=user_business_id
-            )
+
+            # Prepare sale record
+            sale_data = {
+                'product_id': product.id,
+                'quantity': quantity_sold,
+                'total_amount': sale_price_override,
+                'business_id': user_business_id
+            }
+
+            if user_role == 'staff':
+                sale_data['staff_id'] = user_id  # Only set if staff
+
+            new_sale = Sale(**sale_data)
             db.session.add(new_sale)
             db.session.flush()
 
-            new_inventory_log = Inventory(
-                product_id=product.id, 
-                quantity=-quantity_sold,
-                staff_id=user_id
-            )
+            # Prepare inventory log
+            inventory_data = {
+                'product_id': product.id,
+                'quantity': -quantity_sold
+            }
+
+            if user_role == 'staff':
+                inventory_data['staff_id'] = user_id  # Only set if staff
+
+            new_inventory_log = Inventory(**inventory_data)
             db.session.add(new_inventory_log)
 
             db.session.commit()
             flash(f'Sale recorded for {quantity_sold} units of "{product.name}"! Sale ID: {new_sale.id}', 'success')
             return redirect(url_for('sales'))
+
         except Exception as e:
             db.session.rollback()
             flash(f'An error occurred during recording sale: {e}', 'danger')
             app.logger.error(f"Error recording sale: {e}")
 
     return render_template('record_sale.html', products=products_for_sale, now=datetime.datetime.utcnow())
-
 
 # --- Expense Records Section ---
 @app.route('/expenses')
