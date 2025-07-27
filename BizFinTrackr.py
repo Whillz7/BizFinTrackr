@@ -34,7 +34,7 @@ class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(20), unique=False, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=True) # Changed to nullable=True as per SQL
-    password_hash = db.Column(db.String(128), nullable=False)
+    password_hash = db.Column(db.String(512), nullable=False)
     role = db.Column(db.String(10), nullable=False)
     business_id = db.Column(db.Integer, db.ForeignKey('business.id'), nullable=True) # Changed to nullable=True as per SQL
 
