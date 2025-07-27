@@ -205,26 +205,30 @@ def register():
         new_owner.set_password(password)
 
         try:
+            # Commit the new_owner first to ensure its ID is generated and persisted
             db.session.add(new_owner)
-            db.session.flush()  # To get new_owner.id before commit
+            db.session.commit() # First commit for the User
 
+            # Now, new_owner.id is definitely available and persisted
             # Create the business and assign owner
             new_business = Business(name=business_name, owner_id=new_owner.id)
             db.session.add(new_business)
-            db.session.flush()  # To get new_business.id before commit
+            # No flush needed here, as new_owner.id is already committed
 
-            # ✅ Generate Business Code in format: BFT/YYMM/F0001
+            # Generate Business Code in format: BFT/YYMM/F0001
             now_dt = datetime.datetime.utcnow()
-            year_month = now_dt.strftime('%y%m')  # e.g., 2507
+            year_month = now_dt.strftime('%y%m')
             first_letter = business_name[0].upper()
-            padded_id = str(new_business.id).zfill(4)
+            # We need to flush here to get the new_business.id before generating the business_code
+            db.session.flush() 
+            padded_id = str(new_business.id).zfill(4) 
             business_code = f'BFT/{year_month}/{first_letter}{padded_id}'
 
             # Assign business code and update user
             new_business.business_code_prefix = business_code
-            new_owner.business_id = new_business.id
+            new_owner.business_id = new_business.id # Link the user to the business
 
-            db.session.commit()
+            db.session.commit() # Second commit for the Business and updated User
 
             flash(f'Business "{business_name}" registered successfully! Your Business Code is: {business_code}. You can now log in.', 'success')
             return redirect(url_for('login'))
