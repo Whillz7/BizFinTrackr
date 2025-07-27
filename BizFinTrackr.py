@@ -184,7 +184,7 @@ def landing():
     return render_template('landing.html', now=datetime.datetime.utcnow())
 
 
-@app.route('/register', methods=['GET', 'POST'])
+@app.route('/register', methods=['GET', 'POST']) 
 def register():
     if request.method == 'POST':
         username = request.form.get('username')
@@ -227,7 +227,7 @@ def register():
 
             # Step 4: Update business and user
             new_business.business_code_prefix = business_code
-            new_owner.business_id = new_business.id
+            new_owner.business_id = new_business.id  # 🔁 Set owner's business_id here
 
             # Step 5: Final commit
             db.session.commit()
