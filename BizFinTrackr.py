@@ -240,9 +240,9 @@ def register():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        identifier = request.form.get('identifier') # Can be owner email or staff username
+        identifier = request.form.get('identifier')  # Can be owner email or staff username
         password = request.form.get('password')
-        business_name_input = request.form.get('business_name') # New field for staff login
+        business_name_input = request.form.get('business_name')  # New field for staff login
 
         user = None
         business = None
@@ -250,50 +250,49 @@ def login():
         # Try to log in as owner (email or username)
         if '@' in identifier:
             user = User.query.filter_by(email=identifier, role='owner').first()
-        
-        if not user: # If not found by email or not an owner email, try by username
+
+        if not user:  # If not found by email or not an owner email, try by username
             user = User.query.filter_by(username=identifier).first()
 
         if user:
-            # For owner, business_name_input is not strictly necessary for validation
-            # but we can still check if they provided a business name and it matches their registered business
             if user.role == 'owner':
-                if user.owned_business and business_name_input and user.owned_business.name.lower() != business_name_input.lower():
-                     flash('Business name does not match your owner account. Please ensure it is correct.', 'danger')
-                     return render_template('login.html', now=datetime.datetime.utcnow())
-                # If owner, and no business name or it matches, proceed
-                business = user.owned_business
-            
-            # --- MODIFIED: Logic for Staff Login ---
+                # Safely fetch owned business
+                business = Business.query.filter_by(owner_id=user.id).first()
+
+                if business_name_input and business and business.name.lower() != business_name_input.lower():
+                    flash('Business name does not match your owner account. Please ensure it is correct.', 'danger')
+                    return render_template('login.html', now=datetime.datetime.utcnow())
+
             elif user.role == 'staff':
                 if not business_name_input:
                     flash('Business name is required for staff login.', 'danger')
                     return render_template('login.html', now=datetime.datetime.utcnow())
-                
-                # Verify staff belongs to the specified business
+
+                # Match business name (case-insensitive)
                 business_from_input = Business.query.filter(func.lower(Business.name) == func.lower(business_name_input)).first()
-                
+
                 if not business_from_input or user.business_id != business_from_input.id:
                     flash('Invalid business name or staff not associated with this business.', 'danger')
                     return render_template('login.html', now=datetime.datetime.utcnow())
-                
+
                 business = business_from_input
-            
+
             # If user and business checks pass, proceed with password check
             if user.check_password(password):
-                session['user_id'] = user.id # Changed 'users_id' to 'user_id'
+                session['user_id'] = user.id
                 session['role'] = user.role
                 session['business_id'] = user.business_id
-                session['username'] = user.username 
-                session['business_name'] = business.name if business else 'N/A' # Store business name in session
+                session['username'] = user.username
+                session['business_name'] = business.name if business else 'N/A'
                 flash(f'Welcome, {user.username}! You are logged in as {user.role} of {session["business_name"]}.', 'success')
                 return redirect(url_for('dashboard'))
             else:
                 flash('Login Unsuccessful. Incorrect password.', 'danger')
         else:
-            flash('Login Unsuccessful. users not found.', 'danger')
-            
+            flash('Login Unsuccessful. User not found.', 'danger')
+
     return render_template('login.html', now=datetime.datetime.utcnow())
+
 
 @app.route('/logout')
 def logout():
