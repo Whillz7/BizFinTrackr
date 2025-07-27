@@ -201,34 +201,31 @@ def register():
             flash('A business with this name already exists. Please choose a different name.', 'danger')
             return render_template('register.html', now=datetime.datetime.utcnow())
 
-        new_owner = User(username=username, email=email, role='owner')
-        new_owner.set_password(password)
-
         try:
-            # Commit the new_owner first to ensure its ID is generated and persisted
+            # Step 1: Create user
+            new_owner = User(username=username, email=email, role='owner')
+            new_owner.set_password(password)
             db.session.add(new_owner)
-            db.session.commit() # First commit for the User
+            db.session.flush()  # ensures new_owner.id is available
 
-            # Now, new_owner.id is definitely available and persisted
-            # Create the business and assign owner
+            # Step 2: Create business
             new_business = Business(name=business_name, owner_id=new_owner.id)
             db.session.add(new_business)
-            # No flush needed here, as new_owner.id is already committed
+            db.session.flush()  # ensures new_business.id is available
 
-            # Generate Business Code in format: BFT/YYMM/F0001
+            # Step 3: Generate business code
             now_dt = datetime.datetime.utcnow()
             year_month = now_dt.strftime('%y%m')
             first_letter = business_name[0].upper()
-            # We need to flush here to get the new_business.id before generating the business_code
-            db.session.flush() 
-            padded_id = str(new_business.id).zfill(4) 
+            padded_id = str(new_business.id).zfill(4)
             business_code = f'BFT/{year_month}/{first_letter}{padded_id}'
 
-            # Assign business code and update user
+            # Step 4: Update business and user
             new_business.business_code_prefix = business_code
-            new_owner.business_id = new_business.id # Link the user to the business
+            new_owner.business_id = new_business.id
 
-            db.session.commit() # Second commit for the Business and updated User
+            # Step 5: Final commit
+            db.session.commit()
 
             flash(f'Business "{business_name}" registered successfully! Your Business Code is: {business_code}. You can now log in.', 'success')
             return redirect(url_for('login'))
