@@ -68,8 +68,13 @@ class Business(db.Model):
     business_code_prefix = db.Column(db.String(100), unique=True, nullable=True) # e.g., 'BC/2506/D0001'
 
     # Updated relationship to match the SQL schema and avoid conflicts
-    owner_user = db.relationship('User', backref='owned_business', lazy=True, uselist=False,
-                                 primaryjoin="User.id == Business.owner_id")
+    owner_user = db.relationship(
+    'User',
+    backref=db.backref('owned_business', uselist=False),
+    foreign_keys=[owner_id],
+    lazy='joined'
+)
+
     users = db.relationship('User', backref='business', lazy=True, foreign_keys='User.business_id') # Renamed staff to users for clarity
     products = db.relationship('Product', backref='business', lazy=True)
     sales = db.relationship('Sale', backref='business', lazy=True)
