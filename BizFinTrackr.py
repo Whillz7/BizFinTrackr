@@ -122,17 +122,15 @@ class Inventory(db.Model):
 class Sale(db.Model):
     __tablename__ = 'sale'
     id = db.Column(db.Integer, primary_key=True)
-    date = db.Column(db.DateTime, nullable=False, default=datetime.datetime.utcnow) # Renamed sale_date to date
-    quantity = db.Column(db.Integer, nullable=False) # Renamed quantity_sold to quantity
-    total_amount = db.Column(db.Float, nullable=False) # Renamed sale_price to total_amount
+    date = db.Column(db.DateTime, nullable=False, default=datetime.datetime.utcnow)
+    quantity = db.Column(db.Integer, nullable=False)
+    total_amount = db.Column(db.Float, nullable=False)
     product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False)
     business_id = db.Column(db.Integer, db.ForeignKey('business.id'), nullable=False)
-    staff_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True) # Changed to nullable=True as per SQL
-    # Removed custom_id from Sale model as it's not in the SQL schema for sale table
+    staff_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)  # Either owner or staff
 
     def __repr__(self):
         return f"Sale(ID: {self.id}, Product ID: {self.product_id}, Qty: {self.quantity})"
-
 
 class Expense(db.Model):
     __tablename__ = 'expense'
@@ -666,34 +664,32 @@ def delete_product(product_id):
 @login_required
 def sales():
     user_business_id = session.get('business_id')
-    sales = Sale.query.filter_by(business_id=user_business_id).order_by(Sale.date.desc()).all() # Changed sale_date to date
+    sales = Sale.query.filter_by(business_id=user_business_id).order_by(Sale.date.desc()).all()
     return render_template('sales.html', sales=sales, now=datetime.datetime.utcnow())
 
 @app.route('/record_sale', methods=['GET', 'POST'])
 @login_required 
 def record_sale():
+    user_id = session.get('user_id')
     user_business_id = session.get('business_id')
     products_for_sale = Product.query.filter_by(business_id=user_business_id).all()
 
     if request.method == 'POST':
         product_id = request.form.get('product_id')
         quantity_sold = request.form.get('quantity_sold')
-        sale_price_override = request.form.get('sale_price') # New field for actual sale price
+        sale_price_override = request.form.get('sale_price')
 
-        if not all([product_id, quantity_sold, sale_price_override is not None]):
+        if not all([product_id, quantity_sold, sale_price_override]):
             flash('Product, Quantity, and Sale Price are required.', 'danger')
             return render_template('record_sale.html', products=products_for_sale, now=datetime.datetime.utcnow())
-        
+
         try:
             product_id = int(product_id)
             quantity_sold = int(quantity_sold)
             sale_price_override = float(sale_price_override)
 
-            if quantity_sold <= 0:
-                flash('Quantity must be a positive number.', 'danger')
-                return render_template('record_sale.html', products=products_for_sale, now=datetime.datetime.utcnow())
-            if sale_price_override <= 0:
-                flash('Sale price must be a positive number.', 'danger')
+            if quantity_sold <= 0 or sale_price_override <= 0:
+                flash('Quantity and Sale Price must be positive numbers.', 'danger')
                 return render_template('record_sale.html', products=products_for_sale, now=datetime.datetime.utcnow())
 
         except ValueError:
@@ -705,10 +701,8 @@ def record_sale():
             flash('Invalid product selected.', 'danger')
             return render_template('record_sale.html', products=products_for_sale, now=datetime.datetime.utcnow())
 
-        current_stock = product.in_stock 
-
-        if quantity_sold > current_stock:
-            flash(f'Not enough stock. Only {current_stock} units of "{product.name}" available.', 'danger')
+        if quantity_sold > product.in_stock:
+            flash(f'Not enough stock. Only {product.in_stock} units of "{product.name}" available.', 'danger')
             return render_template('record_sale.html', products=products_for_sale, now=datetime.datetime.utcnow())
 
         try:
@@ -717,26 +711,23 @@ def record_sale():
             
             new_sale = Sale(
                 product_id=product.id,
-                quantity=quantity_sold, # Changed quantity_sold to quantity
-                total_amount=sale_price_override, # Changed sale_price to total_amount
-                staff_id=session['user_id'], # Changed 'users_id' to 'user_id'
-                business_id=session['business_id']
+                quantity=quantity_sold,
+                total_amount=sale_price_override,
+                staff_id=user_id,
+                business_id=user_business_id
             )
             db.session.add(new_sale)
-            db.session.flush() # Assigns an ID to new_sale without committing to the DB yet
+            db.session.flush()
 
-            # Removed custom_id generation as it's not in the SQL schema for sale table
-            
             new_inventory_log = Inventory(
                 product_id=product.id, 
                 quantity=-quantity_sold,
-                staff_id=session['user_id'], # Changed 'users_id' to 'user_id'
-                # Removed business_id from Inventory creation as it's not in the SQL schema
+                staff_id=user_id
             )
             db.session.add(new_inventory_log)
 
-            db.session.commit() # Now commit everything
-            flash(f'Sale recorded for {quantity_sold} units of "{product.name}"! Sale ID: {new_sale.id}', 'success') # Changed custom_id to id
+            db.session.commit()
+            flash(f'Sale recorded for {quantity_sold} units of "{product.name}"! Sale ID: {new_sale.id}', 'success')
             return redirect(url_for('sales'))
         except Exception as e:
             db.session.rollback()
@@ -913,14 +904,12 @@ def change_password():
 @role_required('owner')
 def add_staff():
     owner_user = User.query.get(session['user_id'])
-
-    # Corrected: access the business via relationship (uselist=False ensures this is not a list)
     owner_business = owner_user.owned_business
+
     if not owner_business:
         flash("You do not have an associated business. Please contact support.", "danger")
         return redirect(url_for('dashboard'))
 
-    # Enforce 3-staff limit
     STAFF_LIMIT_PER_BUSINESS = 3
     current_staff_count = User.query.filter_by(business_id=owner_business.id, role='staff').count()
 
@@ -932,17 +921,15 @@ def add_staff():
             flash('Username and password are required for staff registration.', 'danger')
             return render_template('add_staff.html', current_staff_count=current_staff_count, staff_limit=STAFF_LIMIT_PER_BUSINESS, owner_user=owner_user, now=datetime.datetime.utcnow())
 
-        # Check for username conflict within the business
         existing_staff = User.query.filter_by(username=username, business_id=owner_business.id, role='staff').first()
         if existing_staff:
-            flash('Username already exists for a staff member in your business. Please choose a different one.', 'danger')
-            return render_template('add_staff.html', current_staff_count=current_staff_count, staff_limit=STAFF_LIMIT_PER_BUSINESS, owner_user=owner_user, now=datetime.datetime.utcnow())
-        
-        if current_staff_count >= STAFF_LIMIT_PER_BUSINESS:
-            flash(f'You have reached the maximum of {STAFF_LIMIT_PER_BUSINESS} staff members for your business.', 'danger')
+            flash('Username already exists for a staff member in your business.', 'danger')
             return render_template('add_staff.html', current_staff_count=current_staff_count, staff_limit=STAFF_LIMIT_PER_BUSINESS, owner_user=owner_user, now=datetime.datetime.utcnow())
 
-        # Create and save new staff
+        if current_staff_count >= STAFF_LIMIT_PER_BUSINESS:
+            flash(f'You have reached the maximum of {STAFF_LIMIT_PER_BUSINESS} staff members.', 'danger')
+            return render_template('add_staff.html', current_staff_count=current_staff_count, staff_limit=STAFF_LIMIT_PER_BUSINESS, owner_user=owner_user, now=datetime.datetime.utcnow())
+
         new_staff = User(
             username=username,
             email=None,
@@ -955,7 +942,7 @@ def add_staff():
             db.session.add(new_staff)
             db.session.commit()
             flash(f'Staff member "{username}" added successfully to {owner_business.name}!', 'success')
-            current_staff_count += 1  # Update count locally
+            current_staff_count += 1
         except Exception as e:
             db.session.rollback()
             flash(f'An error occurred while adding staff: {str(e)}', 'danger')
