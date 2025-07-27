@@ -1,6 +1,8 @@
 import datetime
 import os
 import logging
+import psycopg2 # type: ignore
+import socket
 
 from flask import Flask, flash, redirect, render_template, request, session, url_for
 from flask_sqlalchemy import SQLAlchemy
@@ -15,6 +17,18 @@ db_url = os.environ.get('DATABASE_URL')
 
 if db_url and db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
+
+# Force IPv4 address resolution
+addr = socket.gethostbyname('db.tsyalxhkmmvindwxzrhc.supabase.co')
+
+conn = psycopg2.connect(
+    host=addr,
+    port=5432,
+    dbname='postgres',
+    user='your_user',
+    password='your_password',
+    sslmode='require'
+)
 
 app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
