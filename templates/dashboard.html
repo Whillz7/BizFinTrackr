@@ -161,7 +161,7 @@
                                         <td>{{ sale.quantity }}</td>
                                         <td>${{ "%.2f"|format(sale.total_amount) }}</td>
                                         <td>${{ "%.2f"|format(sale.quantity * sale.total_amount) }}</td> {# Calculate Total #}
-                                        <td>{{ sale.sale_date.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                                        <td>{{ sale.date.strftime('%Y-%m-%d %H:%M:%S') }}</td>
                                         <td>{{ sale.staff_user.username if sale.staff_user else 'N/A' }}</td>
                                         <td>
                                             {# Currently no direct edit/delete for sales in your app, but good to keep structure for future #}
