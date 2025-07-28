@@ -32,18 +32,20 @@ class User(db.Model):
     __tablename__ = 'users'
 
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(20), unique=False, nullable=False)
-    email = db.Column(db.String(120), unique=True, nullable=True) # Changed to nullable=True as per SQL
+    username = db.Column(db.String(20), nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=True)
     password_hash = db.Column(db.String(512), nullable=False)
-    role = db.Column(db.String(10), nullable=False)
-    business_id = db.Column(db.Integer, db.ForeignKey('business.id'), nullable=True) # Changed to nullable=True as per SQL
+    role = db.Column(db.String(10), nullable=False)  # 'owner' or 'staff'
+    business_id = db.Column(db.Integer, db.ForeignKey('business.id'), nullable=True)
 
-    # Removed __table_args__ as it's not present in the SQL schema for users table
-    # Removed owned_business relationship as it's defined on the Business side in SQL
+    # ✅ New: Optional staff identifier for staff members only
+    staff_code = db.Column(db.String(10), unique=True, nullable=True)
+
+    # Relationships
     sales = db.relationship('Sale', backref='staff_user', lazy=True)
     expenses = db.relationship('Expense', backref='staff_user', lazy=True)
     inventory_updates = db.relationship('Inventory', backref='staff_user', lazy=True)
-    
+
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
 
@@ -51,13 +53,10 @@ class User(db.Model):
         return check_password_hash(self.password_hash, password)
 
     def __repr__(self):
-        return f"users('{self.username}', '{self.role}', Staff_ID: {self.id}, Business_ID: {self.business_id})"
-
-    @property
-    def staff_code(self):
-        if self.id is not None:
-            return str(self.id).zfill(2)[-2:]
-        return 'YY'
+        return (
+            f"User(username='{self.username}', role='{self.role}', "
+            f"id={self.id}, staff_code='{self.staff_code}', business_id={self.business_id})"
+        )
 
 class Business(db.Model):
     __tablename__ = 'business'
@@ -565,76 +564,93 @@ def restock_product(product_id):
     return render_template('restock_product.html', product=product, current_stock=current_stock, now=datetime.datetime.utcnow())
 
 
-@app.route('/sell_product/<int:product_id>', methods=['GET', 'POST'])
-@login_required 
-def sell_product(product_id):
-    product = Product.query.get_or_404(product_id)
-    if product.business_id != session.get('business_id'):
-        flash("Access denied to this product.", "danger")
-        return redirect(url_for('products'))
-        
-    current_stock = product.in_stock 
+@app.route('/sell_product', methods=['GET', 'POST'])
+@login_required
+def sell_product():
+    user_id = session.get('user_id')
+    user_role = session.get('role')
+    business_id = session.get('business_id')
+    products = Product.query.filter_by(business_id=business_id).all()
 
     if request.method == 'POST':
-        quantity_to_sell = request.form.get('quantity')
-        sale_price_override = request.form.get('sale_price')  # User can specify sale price
+        product_id = request.form.get('product_id')
+        quantity = request.form.get('quantity')
+        price = request.form.get('price')
+        staff_code = request.form.get('staff_code')  # For staff entries
 
-        if not all([quantity_to_sell, sale_price_override is not None]):
-            flash('Quantity and Sale Price are required.', 'danger')
-            return render_template('sell_product.html', product=product, current_stock=current_stock, now=datetime.datetime.utcnow())
+        if not all([product_id, quantity, price]):
+            flash('All fields are required.', 'danger')
+            return render_template('sell_product.html', products=products)
 
         try:
-            quantity_to_sell = int(quantity_to_sell)
-            sale_price_override = float(sale_price_override)
-
-            if quantity_to_sell <= 0:
-                flash('Please enter a valid positive quantity to sell.', 'danger')
-                return render_template('sell_product.html', product=product, current_stock=current_stock, now=datetime.datetime.utcnow())
-            
-            if sale_price_override <= 0:
-                flash('Sale price must be a positive number.', 'danger')
-                return render_template('sell_product.html', product=product, current_stock=current_stock, now=datetime.datetime.utcnow())
-
+            product_id = int(product_id)
+            quantity = int(quantity)
+            price = float(price)
         except ValueError:
-            flash('Quantity and Sale Price must be valid numbers.', 'danger')
-            return render_template('sell_product.html', product=product, current_stock=current_stock, now=datetime.datetime.utcnow())
+            flash('Quantity and price must be numeric.', 'danger')
+            return render_template('sell_product.html', products=products)
 
-        if quantity_to_sell > current_stock:
-            flash(f'Not enough stock. Only {current_stock} units of "{product.name}" available.', 'danger')
-            return render_template('sell_product.html', product=product, current_stock=current_stock, now=datetime.datetime.utcnow())
+        if quantity <= 0 or price <= 0:
+            flash('Quantity and price must be positive.', 'danger')
+            return render_template('sell_product.html', products=products)
+
+        product = Product.query.get(product_id)
+        if not product or product.business_id != business_id:
+            flash('Invalid product.', 'danger')
+            return render_template('sell_product.html', products=products)
+
+        if product.in_stock < quantity:
+            flash(f'Not enough stock. Available: {product.in_stock}', 'danger')
+            return render_template('sell_product.html', products=products)
 
         try:
-            # Update product stock
-            product.in_stock -= quantity_to_sell
-            product.total_sold += quantity_to_sell 
+            # Determine who is making the sale
+            if user_role == 'staff':
+                if not staff_code:
+                    flash('Staff code is required for staff users.', 'danger')
+                    return render_template('sell_product.html', products=products)
 
-            # ✅ Sale: No staff_id is passed
-            new_sale = Sale(
+                staff_user = User.query.filter_by(staff_code=staff_code, role='staff', business_id=business_id).first()
+                if not staff_user:
+                    flash('Invalid staff code.', 'danger')
+                    return render_template('sell_product.html', products=products)
+
+                staff_id = staff_user.id
+            else:
+                staff_id = user_id  # Owner
+
+            # Record sale
+            sale = Sale(
+                product_id=product_id,
+                quantity=quantity,
+                total_amount=price,
+                business_id=business_id,
+                staff_id=staff_id
+            )
+            db.session.add(sale)
+
+            # Update product stock and sales count
+            product.in_stock -= quantity
+            product.total_sold += quantity
+
+            # Record inventory change
+            inventory_log = Inventory(
                 product_id=product.id,
-                quantity=quantity_to_sell,
-                total_amount=sale_price_override,
-                business_id=session['business_id']
+                quantity=-quantity,
+                staff_id=staff_id
             )
-            db.session.add(new_sale)
-
-            # Log inventory change (still keeps staff_id)
-            new_inventory_log = Inventory(
-                product_id=product.id, 
-                quantity=-quantity_to_sell,
-                staff_id=session.get('user_id')  # Optional, nullable in DB
-            )
-            db.session.add(new_inventory_log)
+            db.session.add(inventory_log)
 
             db.session.commit()
-            flash(f'{quantity_to_sell} units of "{product.name}" sold successfully! Sale ID: {new_sale.id}', 'success')
-            return redirect(url_for('products'))
+            flash(f'Successfully sold {quantity} units of {product.name}.', 'success')
+            return redirect(url_for('sales'))
 
         except Exception as e:
             db.session.rollback()
-            flash(f'An error occurred during sale: {e}', 'danger')
-            app.logger.error(f"Error selling product {product_id}: {e}")
+            flash(f'An error occurred while processing the sale: {e}', 'danger')
+            app.logger.error(f'Error during sale: {e}')
 
-    return render_template('sell_product.html', product=product, current_stock=current_stock, now=datetime.datetime.utcnow())
+    return render_template('sell_product.html', products=products)
 
 @app.route('/delete_product/<int:product_id>', methods=['POST'])
 @role_required('owner') 
@@ -677,6 +693,7 @@ def record_sale():
         product_id = request.form.get('product_id')
         quantity_sold = request.form.get('quantity_sold')
         sale_price_override = request.form.get('sale_price')
+        staff_code = request.form.get('staff_code')  # Optional, used for staff
 
         if not all([product_id, quantity_sold, sale_price_override]):
             flash('Product, Quantity, and Sale Price are required.', 'danger')
@@ -709,31 +726,38 @@ def record_sale():
             product.in_stock -= quantity_sold
             product.total_sold += quantity_sold
 
-            # Prepare sale record
-            sale_data = {
-                'product_id': product.id,
-                'quantity': quantity_sold,
-                'total_amount': sale_price_override,
-                'business_id': user_business_id
-            }
-
+            # Determine staff_id based on user role
             if user_role == 'staff':
-                sale_data['staff_id'] = user_id  # Optional staff_id
+                if not staff_code:
+                    flash('Staff code is required for staff users.', 'danger')
+                    return render_template('record_sale.html', products=products_for_sale, now=datetime.datetime.utcnow())
+                
+                staff_user = User.query.filter_by(staff_code=staff_code, role='staff', business_id=user_business_id).first()
+                if not staff_user:
+                    flash('Invalid staff code.', 'danger')
+                    return render_template('record_sale.html', products=products_for_sale, now=datetime.datetime.utcnow())
 
-            new_sale = Sale(**sale_data)
+                staff_id = staff_user.id
+            else:
+                staff_id = user_id  # Owner
+
+            # Create and commit the Sale
+            new_sale = Sale(
+                product_id=product.id,
+                quantity=quantity_sold,
+                total_amount=sale_price_override,
+                business_id=user_business_id,
+                staff_id=staff_id
+            )
             db.session.add(new_sale)
             db.session.flush()
 
-            # Prepare inventory log
-            inventory_data = {
-                'product_id': product.id,
-                'quantity': -quantity_sold
-            }
-
-            if user_role == 'staff':
-                inventory_data['staff_id'] = user_id  # Optional staff_id
-
-            new_inventory_log = Inventory(**inventory_data)
+            # Create Inventory record
+            new_inventory_log = Inventory(
+                product_id=product.id,
+                quantity=-quantity_sold,
+                staff_id=staff_id
+            )
             db.session.add(new_inventory_log)
 
             db.session.commit()
@@ -756,12 +780,17 @@ def expenses():
     return render_template('expenses.html', expenses=expenses, now=datetime.datetime.utcnow())
 
 @app.route('/add_expense', methods=['GET', 'POST'])
-@login_required 
+@login_required
 def add_expense():
+    user_id = session.get('user_id')
+    role = session.get('role')
+    business_id = session.get('business_id')
+
     if request.method == 'POST':
         description = request.form.get('description')
         amount = request.form.get('amount')
         category = request.form.get('category')
+        staff_code = request.form.get('staff_code')  # Optional (needed for staff)
 
         if not all([description, amount, category]):
             flash('All expense fields are required.', 'danger')
@@ -776,24 +805,39 @@ def add_expense():
             flash('Amount must be a valid number.', 'danger')
             return render_template('add_expense.html', now=datetime.datetime.utcnow())
 
-        # Determine staff_id only if user is staff
-        staff_id = session.get('user_id') if session.get('role') == 'staff' else None
-
-        new_expense = Expense(
-            description=description,
-            amount=amount,
-            category=category,
-            staff_id=staff_id,  # Only assigned if user is staff
-            business_id=session['business_id']
-        )
         try:
+            # Determine the correct staff_id
+            if role == 'staff':
+                if not staff_code:
+                    flash('Staff code is required.', 'danger')
+                    return render_template('add_expense.html', now=datetime.datetime.utcnow())
+
+                staff_user = User.query.filter_by(staff_code=staff_code, role='staff', business_id=business_id).first()
+                if not staff_user:
+                    flash('Invalid staff code.', 'danger')
+                    return render_template('add_expense.html', now=datetime.datetime.utcnow())
+
+                staff_id = staff_user.id
+            else:
+                staff_id = user_id  # Owner making the entry
+
+            # Create and commit expense
+            new_expense = Expense(
+                description=description,
+                amount=amount,
+                category=category,
+                staff_id=staff_id,
+                business_id=business_id
+            )
             db.session.add(new_expense)
             db.session.commit()
+
             flash(f'Expense "{description}" of ${amount:.2f} recorded successfully!', 'success')
             return redirect(url_for('expenses'))
+
         except Exception as e:
             db.session.rollback()
-            flash('An error occurred while adding expense. Please try again.', 'danger')
+            flash(f'An error occurred while adding expense: {e}', 'danger')
             app.logger.error(f"Error adding expense: {e}")
 
     return render_template('add_expense.html', now=datetime.datetime.utcnow())
@@ -914,60 +958,46 @@ def change_password():
 # --- Staff Management Routes ---
 
 @app.route('/add_staff', methods=['GET', 'POST'])
-@role_required('owner')
+@login_required
 def add_staff():
-    owner_user = User.query.get(session['user_id'])
-    owner_business = owner_user.owned_business
-
-    if not owner_business:
-        flash("You do not have an associated business. Please contact support.", "danger")
+    if session.get('role') != 'owner':
+        flash('Only business owners can add staff.', 'danger')
         return redirect(url_for('dashboard'))
-
-    STAFF_LIMIT_PER_BUSINESS = 3
-    current_staff_count = User.query.filter_by(business_id=owner_business.id, role='staff').count()
 
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
 
-        if not username or not password:
-            flash('Username and password are required for staff registration.', 'danger')
-            return render_template('add_staff.html', current_staff_count=current_staff_count, staff_limit=STAFF_LIMIT_PER_BUSINESS, owner_user=owner_user, now=datetime.datetime.utcnow())
+        if not all([username, password]):
+            flash('All fields are required.', 'danger')
+            return render_template('add_staff.html')
 
-        existing_staff = User.query.filter_by(username=username, business_id=owner_business.id, role='staff').first()
-        if existing_staff:
-            flash('Username already exists for a staff member in your business.', 'danger')
-            return render_template('add_staff.html', current_staff_count=current_staff_count, staff_limit=STAFF_LIMIT_PER_BUSINESS, owner_user=owner_user, now=datetime.datetime.utcnow())
+        business_id = session.get('business_id')
 
-        if current_staff_count >= STAFF_LIMIT_PER_BUSINESS:
-            flash(f'You have reached the maximum of {STAFF_LIMIT_PER_BUSINESS} staff members.', 'danger')
-            return render_template('add_staff.html', current_staff_count=current_staff_count, staff_limit=STAFF_LIMIT_PER_BUSINESS, owner_user=owner_user, now=datetime.datetime.utcnow())
+        # Count existing staff in this business to generate staff_code
+        staff_count = User.query.filter_by(business_id=business_id, role='staff').count()
+        next_code = f"S{str(staff_count + 1).zfill(2)}"  # e.g. S01, S02, ...
 
         new_staff = User(
             username=username,
-            email=None,
             role='staff',
-            business_id=owner_business.id
+            business_id=business_id,
+            staff_code=next_code
         )
         new_staff.set_password(password)
 
         try:
             db.session.add(new_staff)
             db.session.commit()
-            flash(f'Staff member "{username}" added successfully to {owner_business.name}!', 'success')
-            current_staff_count += 1
+            flash(f'Staff "{username}" added successfully with staff code {next_code}.', 'success')
+            return redirect(url_for('view_staff'))
+
         except Exception as e:
             db.session.rollback()
-            flash(f'An error occurred while adding staff: {str(e)}', 'danger')
+            flash(f'An error occurred while adding staff: {e}', 'danger')
             app.logger.error(f"Error adding staff: {e}")
 
-    return render_template(
-        'add_staff.html',
-        current_staff_count=current_staff_count,
-        staff_limit=STAFF_LIMIT_PER_BUSINESS,
-        owner_user=owner_user,
-        now=datetime.datetime.utcnow()
-    )
+    return render_template('add_staff.html')
 
 @app.route('/edit_staff/<int:staff_id>', methods=['GET', 'POST'])
 @role_required('owner')
