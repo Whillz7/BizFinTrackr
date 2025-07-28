@@ -206,7 +206,7 @@
                                             <td>{{ expense.description }}</td>
                                             <td>${{ '%.2f' % expense.amount }}</td>
                                             <td>{{ expense.category }}</td>
-                                            <td>{{ expense.expense_date.strftime('%Y-%m-%d %H:%M') }}</td>
+                                            <td>{{ expense.date.strftime('%Y-%m-%d %H:%M') }}</td>
                                         </tr>
                                         {% endfor %}
                                     </tbody>
