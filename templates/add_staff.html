@@ -13,18 +13,11 @@
                     You have reached the maximum number of staff members for your business ({{ staff_limit }}).
                 </div>
                 {% endif %}
-
-                <form method="POST" action="{{ url_for('add_staff') }}">
-                    <div class="form-group">
-                        <label for="username">Staff Username:</label>
-                        <input type="text" class="form-control" id="username" name="username" required {% if current_staff_count >= staff_limit %}disabled{% endif %}>
-                    </div>
-                    <div class="form-group">
-                        <label for="password">Staff Password:</label>
-                        <input type="password" class="form-control" id="password" name="password" required {% if current_staff_count >= staff_limit %}disabled{% endif %}>
-                    </div>
-                    <button type="submit" class="btn btn-primary btn-block" {% if current_staff_count >= staff_limit %}disabled{% endif %}>Add Staff</button>
-                </form>
+                <form method="POST">
+                    <input type="text" name="username" placeholder="Staff Name" required>
+                    <input type="password" name="password" placeholder="Password" required>
+                    <button type="submit">Add Staff</button>
+                  </form>               
             </div>
         </div>
     </div>
