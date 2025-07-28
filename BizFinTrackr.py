@@ -762,11 +762,11 @@ def add_expense():
         description = request.form.get('description')
         amount = request.form.get('amount')
         category = request.form.get('category')
-        
+
         if not all([description, amount, category]):
             flash('All expense fields are required.', 'danger')
             return render_template('add_expense.html', now=datetime.datetime.utcnow())
-        
+
         try:
             amount = float(amount)
             if amount <= 0:
@@ -775,12 +775,15 @@ def add_expense():
         except ValueError:
             flash('Amount must be a valid number.', 'danger')
             return render_template('add_expense.html', now=datetime.datetime.utcnow())
-        
+
+        # Determine staff_id only if user is staff
+        staff_id = session.get('user_id') if session.get('role') == 'staff' else None
+
         new_expense = Expense(
             description=description,
             amount=amount,
             category=category,
-            staff_id=session['user_id'], # Changed 'users_id' to 'user_id'
+            staff_id=staff_id,  # Only assigned if user is staff
             business_id=session['business_id']
         )
         try:
@@ -790,7 +793,7 @@ def add_expense():
             return redirect(url_for('expenses'))
         except Exception as e:
             db.session.rollback()
-            flash(f'An error occurred while adding expense: {e}', 'danger')
+            flash('An error occurred while adding expense. Please try again.', 'danger')
             app.logger.error(f"Error adding expense: {e}")
 
     return render_template('add_expense.html', now=datetime.datetime.utcnow())
