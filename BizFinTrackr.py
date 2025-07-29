@@ -576,7 +576,7 @@ def sell_product():
         product_id = request.form.get('product_id')
         quantity = request.form.get('quantity')
         price = request.form.get('price')
-        staff_code = request.form.get('staff_code')  # For staff entries
+        staff_code = request.form.get('staff_code')  # Only needed for staff
 
         if not all([product_id, quantity, price]):
             flash('All fields are required.', 'danger')
@@ -604,10 +604,9 @@ def sell_product():
             return render_template('sell_product.html', products=products)
 
         try:
-            # Determine who is making the sale
             if user_role == 'staff':
                 if not staff_code:
-                    flash('Staff code is required for staff users.', 'danger')
+                    flash('Staff code is required for staff.', 'danger')
                     return render_template('sell_product.html', products=products)
 
                 staff_user = User.query.filter_by(staff_code=staff_code, role='staff', business_id=business_id).first()
@@ -617,11 +616,10 @@ def sell_product():
 
                 staff_id = staff_user.id
             else:
-                staff_id = user_id  # Owner
+                staff_id = user_id  # Owner's user ID
 
-            # Record sale
             sale = Sale(
-                product_id=product_id,
+                product_id=product.id,
                 quantity=quantity,
                 total_amount=price,
                 business_id=business_id,
@@ -629,11 +627,10 @@ def sell_product():
             )
             db.session.add(sale)
 
-            # Update product stock and sales count
+            # Update stock and log inventory change
             product.in_stock -= quantity
             product.total_sold += quantity
 
-            # Record inventory change
             inventory_log = Inventory(
                 product_id=product.id,
                 quantity=-quantity,
@@ -647,8 +644,8 @@ def sell_product():
 
         except Exception as e:
             db.session.rollback()
-            flash(f'An error occurred while processing the sale: {e}', 'danger')
-            app.logger.error(f'Error during sale: {e}')
+            flash(f'An error occurred: {e}', 'danger')
+            app.logger.error(f'Sale error: {e}')
 
     return render_template('sell_product.html', products=products)
 
@@ -682,94 +679,90 @@ def sales():
     return render_template('sales.html', sales=sales, now=datetime.datetime.utcnow())
 
 @app.route('/record_sale', methods=['GET', 'POST'])
-@login_required 
+@login_required
 def record_sale():
     user_id = session.get('user_id')
-    user_business_id = session.get('business_id')
+    business_id = session.get('business_id')
     user_role = session.get('role')
-    products_for_sale = Product.query.filter_by(business_id=user_business_id).all()
+    products = Product.query.filter_by(business_id=business_id).all()
 
     if request.method == 'POST':
         product_id = request.form.get('product_id')
-        quantity_sold = request.form.get('quantity_sold')
-        sale_price_override = request.form.get('sale_price')
-        staff_code = request.form.get('staff_code')  # Optional, used for staff
+        quantity = request.form.get('quantity_sold')
+        sale_price = request.form.get('sale_price')
+        staff_code = request.form.get('staff_code')  # Only needed for staff
 
-        if not all([product_id, quantity_sold, sale_price_override]):
-            flash('Product, Quantity, and Sale Price are required.', 'danger')
-            return render_template('record_sale.html', products=products_for_sale, now=datetime.datetime.utcnow())
+        if not all([product_id, quantity, sale_price]):
+            flash('All fields are required.', 'danger')
+            return render_template('record_sale.html', products=products, now=datetime.datetime.utcnow())
 
         try:
             product_id = int(product_id)
-            quantity_sold = int(quantity_sold)
-            sale_price_override = float(sale_price_override)
+            quantity = int(quantity)
+            sale_price = float(sale_price)
 
-            if quantity_sold <= 0 or sale_price_override <= 0:
+            if quantity <= 0 or sale_price <= 0:
                 flash('Quantity and Sale Price must be positive numbers.', 'danger')
-                return render_template('record_sale.html', products=products_for_sale, now=datetime.datetime.utcnow())
+                return render_template('record_sale.html', products=products, now=datetime.datetime.utcnow())
 
         except ValueError:
-            flash('Product ID, Quantity, and Sale Price must be valid numbers.', 'danger')
-            return render_template('record_sale.html', products=products_for_sale, now=datetime.datetime.utcnow())
+            flash('Invalid input. Use numbers only.', 'danger')
+            return render_template('record_sale.html', products=products, now=datetime.datetime.utcnow())
 
         product = Product.query.get(product_id)
-        if not product or product.business_id != user_business_id:
+        if not product or product.business_id != business_id:
             flash('Invalid product selected.', 'danger')
-            return render_template('record_sale.html', products=products_for_sale, now=datetime.datetime.utcnow())
+            return render_template('record_sale.html', products=products, now=datetime.datetime.utcnow())
 
-        if quantity_sold > product.in_stock:
-            flash(f'Not enough stock. Only {product.in_stock} units of "{product.name}" available.', 'danger')
-            return render_template('record_sale.html', products=products_for_sale, now=datetime.datetime.utcnow())
+        if quantity > product.in_stock:
+            flash(f'Only {product.in_stock} units of "{product.name}" are available.', 'danger')
+            return render_template('record_sale.html', products=products, now=datetime.datetime.utcnow())
 
         try:
-            # Update product stock and sales count
-            product.in_stock -= quantity_sold
-            product.total_sold += quantity_sold
-
-            # Determine staff_id based on user role
             if user_role == 'staff':
                 if not staff_code:
                     flash('Staff code is required for staff users.', 'danger')
-                    return render_template('record_sale.html', products=products_for_sale, now=datetime.datetime.utcnow())
-                
-                staff_user = User.query.filter_by(staff_code=staff_code, role='staff', business_id=user_business_id).first()
+                    return render_template('record_sale.html', products=products, now=datetime.datetime.utcnow())
+
+                staff_user = User.query.filter_by(staff_code=staff_code, role='staff', business_id=business_id).first()
                 if not staff_user:
                     flash('Invalid staff code.', 'danger')
-                    return render_template('record_sale.html', products=products_for_sale, now=datetime.datetime.utcnow())
+                    return render_template('record_sale.html', products=products, now=datetime.datetime.utcnow())
 
                 staff_id = staff_user.id
             else:
-                staff_id = user_id  # Owner
+                staff_id = user_id
 
-            # Create and commit the Sale
             new_sale = Sale(
                 product_id=product.id,
-                quantity=quantity_sold,
-                total_amount=sale_price_override,
-                business_id=user_business_id,
+                quantity=quantity,
+                total_amount=sale_price,
+                business_id=business_id,
                 staff_id=staff_id
             )
             db.session.add(new_sale)
             db.session.flush()
 
-            # Create Inventory record
             new_inventory_log = Inventory(
                 product_id=product.id,
-                quantity=-quantity_sold,
+                quantity=-quantity,
                 staff_id=staff_id
             )
             db.session.add(new_inventory_log)
 
+            product.in_stock -= quantity
+            product.total_sold += quantity
+
             db.session.commit()
-            flash(f'Sale recorded for {quantity_sold} units of "{product.name}"! Sale ID: {new_sale.id}', 'success')
+            flash(f'Sale recorded: {quantity} units of "{product.name}"!', 'success')
             return redirect(url_for('sales'))
 
         except Exception as e:
             db.session.rollback()
-            flash(f'An error occurred during recording sale: {e}', 'danger')
-            app.logger.error(f"Error recording sale: {e}")
+            flash(f'Error: {e}', 'danger')
+            app.logger.error(f"Sale error: {e}")
 
-    return render_template('record_sale.html', products=products_for_sale, now=datetime.datetime.utcnow())
+    return render_template('record_sale.html', products=products, now=datetime.datetime.utcnow())
 
 # --- Expense Records Section ---
 @app.route('/expenses')
