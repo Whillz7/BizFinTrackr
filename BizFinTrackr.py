@@ -1,6 +1,6 @@
 import os
 import logging
-from datetime import datetime
+import datetime
 import socket
 import psycopg2  # type: ignore
 
@@ -787,6 +787,7 @@ def expenses():
 @app.route('/add_expense', methods=['GET', 'POST'])
 @login_required
 def add_expense():
+    import datetime
         # Determine if user is staff or owner
     if session.get('role') == 'staff':
         staff_id = session.get('staff_id')  # This should be a valid staff.id
