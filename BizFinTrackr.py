@@ -787,67 +787,58 @@ def expenses():
 @app.route('/add_expense', methods=['GET', 'POST'])
 @login_required
 def add_expense():
-    # Determine if user is staff or owner
-    if session.get('role') == 'staff':
-        staff_id = session.get('staff_id')  # This should be a valid staff.id
-    else:
-        staff_id = None  # Owner – don't set a foreign key to staff table
-
-    user_id = session.get('user_id')         # For owner
-    staff_id = session.get('staff_id')       # For staff
-    role = session.get('role')
+    import datetime
     business_id = session.get('business_id')
+    role = session.get('role')
 
     if request.method == 'POST':
-        description = request.form.get('description')
         amount = request.form.get('amount')
         category = request.form.get('category')
+        description = request.form.get('description')
 
-        if not all([description, amount, category]):
-            flash('All expense fields are required.', 'danger')
-            return render_template('add_expense.html', now=datetime.datetime.utcnow())
+        if not all([amount, category, description]):
+            flash('All fields are required.', 'danger')
+            return redirect(url_for('expenses'))
 
         try:
             amount = float(amount)
             if amount <= 0:
-                flash('Amount must be a positive number.', 'danger')
-                return render_template('add_expense.html', now=datetime.datetime.utcnow())
-        except ValueError:
-            flash('Amount must be a valid number.', 'danger')
-            return render_template('add_expense.html', now=datetime.datetime.utcnow())
+                flash('Amount must be positive.', 'danger')
+                return redirect(url_for('expenses'))
 
-        try:
-            # Determine who is making the entry
+            # Get staff ID only if user is a staff
             if role == 'staff':
-                if not staff_id:
-                    flash('Unauthorized: Staff ID not found in session.', 'danger')
-                    return redirect(url_for('login'))
-                expense_staff_id = staff_id
-            else:
-                expense_staff_id = user_id
+                staff_id = session.get('staff_id')
 
-            # Create and commit expense
-                expense = Expense(
-                    date=datetime.utcnow(),
-                    amount=amount,
-                    category=category,
-                    description=description,
-                    business_id=session['business_id'],
-                    staff_id=staff_id  # This will be None for owner
-                    )
-            
+                # Validate that staff ID exists in staff table
+                staff = Staff.query.get(staff_id)
+                if not staff or staff.business_id != business_id:
+                    flash("Invalid staff ID.", "danger")
+                    return redirect(url_for('expenses'))
+            else:
+                staff_id = None  # Owner's expense
+
+            expense = Expense(
+                date=datetime.datetime.utcnow(),
+                amount=amount,
+                category=category,
+                description=description,
+                business_id=business_id,
+                staff_id=staff_id
+            )
             db.session.add(expense)
             db.session.commit()
-
-            flash(f'Expense "{description}" of ₦{amount:.2f} recorded successfully!', 'success')
-            return redirect(url_for('expenses'))
-
+            flash('Expense added successfully.', 'success')
+        except ValueError:
+            flash('Invalid amount value.', 'danger')
         except Exception as e:
             db.session.rollback()
+            app.logger.error(f'Error adding expense: {e}')
             flash(f'An error occurred while adding expense: {e}', 'danger')
-            app.logger.error(f"Error adding expense: {e}")
 
-    return render_template('add_expense.html', now=datetime.datetime.utcnow())
+        return redirect(url_for('expenses'))
+
+    return redirect(url_for('expenses'))
 
 # --- Profile Screen ---
 @app.route('/profile')
