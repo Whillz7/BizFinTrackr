@@ -5,7 +5,6 @@ import socket
 import psycopg2  # type: ignore
 
 from flask import Flask, flash, redirect, render_template, request, session, url_for
-from datetime import datetime
 from flask_sqlalchemy import SQLAlchemy
 from functools import wraps
 from sqlalchemy import func, and_
@@ -60,7 +59,7 @@ class Staff(db.Model):
     name = db.Column(db.String(100), nullable=False)
     password = db.Column(db.String(128), nullable=False)
     business_id = db.Column(db.Integer, db.ForeignKey('business.id'), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
 
     business = db.relationship('Business', backref='staff_members')
 
@@ -788,58 +787,67 @@ def expenses():
 @app.route('/add_expense', methods=['GET', 'POST'])
 @login_required
 def add_expense():
-    import datetime
-    business_id = session.get('business_id')
+    # Determine if user is staff or owner
+    if session.get('role') == 'staff':
+        staff_id = session.get('staff_id')  # This should be a valid staff.id
+    else:
+        staff_id = None  # Owner – don't set a foreign key to staff table
+
+    user_id = session.get('user_id')         # For owner
+    staff_id = session.get('staff_id')       # For staff
     role = session.get('role')
+    business_id = session.get('business_id')
 
     if request.method == 'POST':
+        description = request.form.get('description')
         amount = request.form.get('amount')
         category = request.form.get('category')
-        description = request.form.get('description')
 
-        if not all([amount, category, description]):
-            flash('All fields are required.', 'danger')
-            return redirect(url_for('add_expense'))
+        if not all([description, amount, category]):
+            flash('All expense fields are required.', 'danger')
+            return render_template('add_expense.html', now=datetime.datetime.utcnow())
 
         try:
             amount = float(amount)
             if amount <= 0:
-                flash('Amount must be positive.', 'danger')
-                return redirect(url_for('add_expense'))
+                flash('Amount must be a positive number.', 'danger')
+                return render_template('add_expense.html', now=datetime.datetime.utcnow())
+        except ValueError:
+            flash('Amount must be a valid number.', 'danger')
+            return render_template('add_expense.html', now=datetime.datetime.utcnow())
 
-            # Get staff ID only if user is a staff
+        try:
+            # Determine who is making the entry
             if role == 'staff':
-                staff_id = session.get('staff_id')
-                staff = Staff.query.get(staff_id)
-                if not staff or staff.business_id != business_id:
-                    flash("Invalid staff ID.", "danger")
-                    return redirect(url_for('add_expense'))
+                if not staff_id:
+                    flash('Unauthorized: Staff ID not found in session.', 'danger')
+                    return redirect(url_for('login'))
+                expense_staff_id = staff_id
             else:
-                staff_id = None  # Owner's expense
+                expense_staff_id = user_id
 
-            expense = Expense(
-                date=datetime.datetime.utcnow(),
-                amount=amount,
-                category=category,
-                description=description,
-                business_id=business_id,
-                staff_id=staff_id
-            )
+            # Create and commit expense
+                expense = Expense(
+                    date=datetime.utcnow(),
+                    amount=amount,
+                    category=category,
+                    description=description,
+                    business_id=session['business_id'],
+                    staff_id=staff_id  # This will be None for owner
+                    )
+            
             db.session.add(expense)
             db.session.commit()
-            flash('Expense added successfully.', 'success')
+
+            flash(f'Expense "{description}" of ₦{amount:.2f} recorded successfully!', 'success')
             return redirect(url_for('expenses'))
 
-        except ValueError:
-            flash('Invalid amount value.', 'danger')
         except Exception as e:
             db.session.rollback()
-            app.logger.error(f'Error adding expense: {e}')
             flash(f'An error occurred while adding expense: {e}', 'danger')
-        return redirect(url_for('add_expense'))
+            app.logger.error(f"Error adding expense: {e}")
 
-    # Render form page for GET
-    return render_template('add_expense.html')
+    return render_template('add_expense.html', now=datetime.datetime.utcnow())
 
 # --- Profile Screen ---
 @app.route('/profile')
@@ -1172,10 +1180,6 @@ def init_db():
     with app.app_context():
         db.create_all()
     return "Database tables created!"
-
-@app.context_processor
-def inject_now():
-    return {'now': datetime.utcnow()}
 
 # --- Run the Application ---
 if __name__ == '__main__':
