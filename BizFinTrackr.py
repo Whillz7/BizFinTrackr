@@ -5,6 +5,7 @@ import socket
 import psycopg2  # type: ignore
 
 from flask import Flask, flash, redirect, render_template, request, session, url_for
+from datetime import datetime
 from flask_sqlalchemy import SQLAlchemy
 from functools import wraps
 from sqlalchemy import func, and_
@@ -1165,6 +1166,10 @@ def reports():
                            start_date_form=start_date_form,
                            end_date_form=end_date_form,
                            now=datetime.datetime.utcnow())
+
+@app.context_processor
+def inject_now():
+    return {'now': datetime.utcnow()}
 
 @app.route('/init-db')
 def init_db():
