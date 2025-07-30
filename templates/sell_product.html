@@ -26,18 +26,23 @@
         <p><strong>Default Selling Price:</strong> ${{ "%.2f"|format(product.price) }}</p>
 
         <form method="POST">
+            <!-- 👇 Add this hidden input -->
+            <input type="hidden" name="product_id" value="{{ product.id }}">
+        
             <div class="mb-3">
                 <label for="quantity" class="form-label">Quantity to Sell:</label>
                 <input type="number" class="form-control" id="quantity" name="quantity" min="1" max="{{ current_stock }}" required autofocus>
             </div>
+        
             <div class="mb-3">
                 <label for="sale_price" class="form-label">Actual Sale Price (per unit) ($):</label>
                 <input type="number" step="0.01" class="form-control" id="sale_price" name="sale_price" value="{{ "%.2f"|format(product.price) }}" min="0.01" required>
                 <small class="form-text text-muted">Enter the price at which this product is actually being sold. Default is the product's listed selling price.</small>
             </div>
+        
             <button type="submit" class="btn btn-success">Record Sale</button>
             <a href="{{ url_for('products') }}" class="btn btn-secondary">Cancel</a>
-        </form>
+        </form>        
     </div>
 </div>
 {% endblock %}
