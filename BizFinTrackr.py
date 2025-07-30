@@ -798,7 +798,7 @@ def add_expense():
 
         if not all([amount, category, description]):
             flash('All fields are required.', 'danger')
-            return redirect(url_for('expenses'))
+            return redirect(url_for('add_expenses'))
 
         try:
             amount = float(amount)
@@ -814,7 +814,7 @@ def add_expense():
                 staff = Staff.query.get(staff_id)
                 if not staff or staff.business_id != business_id:
                     flash("Invalid staff ID.", "danger")
-                    return redirect(url_for('expenses'))
+                    return redirect(url_for('add_expenses'))
             else:
                 staff_id = None  # Owner's expense
 
