@@ -798,23 +798,21 @@ def add_expense():
 
         if not all([amount, category, description]):
             flash('All fields are required.', 'danger')
-            return redirect(url_for('add_expenses'))
+            return redirect(url_for('add_expense'))
 
         try:
             amount = float(amount)
             if amount <= 0:
                 flash('Amount must be positive.', 'danger')
-                return redirect(url_for('add_expenses'))
+                return redirect(url_for('add_expense'))
 
             # Get staff ID only if user is a staff
             if role == 'staff':
                 staff_id = session.get('staff_id')
-
-                # Validate that staff ID exists in staff table
                 staff = Staff.query.get(staff_id)
                 if not staff or staff.business_id != business_id:
                     flash("Invalid staff ID.", "danger")
-                    return redirect(url_for('add_expenses'))
+                    return redirect(url_for('add_expense'))
             else:
                 staff_id = None  # Owner's expense
 
@@ -829,16 +827,18 @@ def add_expense():
             db.session.add(expense)
             db.session.commit()
             flash('Expense added successfully.', 'success')
+            return redirect(url_for('expenses'))
+
         except ValueError:
             flash('Invalid amount value.', 'danger')
         except Exception as e:
             db.session.rollback()
             app.logger.error(f'Error adding expense: {e}')
             flash(f'An error occurred while adding expense: {e}', 'danger')
+        return redirect(url_for('add_expense'))
 
-        return redirect(url_for('expenses'))
-
-    return redirect(url_for('expenses'))
+    # Render form page for GET
+    return render_template('add_expense.html')
 
 # --- Profile Screen ---
 @app.route('/profile')
