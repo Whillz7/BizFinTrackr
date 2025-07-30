@@ -578,6 +578,18 @@ def sell_product():
     business_id = session.get('business_id')
     products = Product.query.filter_by(business_id=business_id).all()
 
+    # Handle optional product_id in GET request
+    product = None
+    product_id = request.args.get('product_id')
+    if product_id:
+        try:
+            product_id = int(product_id)
+            product = Product.query.get(product_id)
+            if not product or product.business_id != business_id:
+                product = None
+        except ValueError:
+            product = None
+
     if request.method == 'POST':
         product_id = request.form.get('product_id')
         quantity = request.form.get('quantity')
@@ -585,7 +597,7 @@ def sell_product():
 
         if not all([product_id, quantity, price]):
             flash('All fields are required.', 'danger')
-            return render_template('sell_product.html', products=products, now=datetime.datetime.utcnow())
+            return render_template('sell_product.html', products=products, product=product, now=datetime.datetime.utcnow())
 
         try:
             product_id = int(product_id)
@@ -593,20 +605,20 @@ def sell_product():
             price = float(price)
         except ValueError:
             flash('Quantity and price must be numeric.', 'danger')
-            return render_template('sell_product.html', products=products, now=datetime.datetime.utcnow())
+            return render_template('sell_product.html', products=products, product=product, now=datetime.datetime.utcnow())
 
         if quantity <= 0 or price <= 0:
             flash('Quantity and price must be positive.', 'danger')
-            return render_template('sell_product.html', products=products, now=datetime.datetime.utcnow())
+            return render_template('sell_product.html', products=products, product=product, now=datetime.datetime.utcnow())
 
         product = Product.query.get(product_id)
         if not product or product.business_id != business_id:
             flash('Invalid product.', 'danger')
-            return render_template('sell_product.html', products=products, now=datetime.datetime.utcnow())
+            return render_template('sell_product.html', products=products, product=product, now=datetime.datetime.utcnow())
 
         if product.in_stock < quantity:
             flash(f'Not enough stock. Available: {product.in_stock}', 'danger')
-            return render_template('sell_product.html', products=products, now=datetime.datetime.utcnow())
+            return render_template('sell_product.html', products=products, product=product, now=datetime.datetime.utcnow())
 
         try:
             # Get staff_id or owner user_id
@@ -645,7 +657,7 @@ def sell_product():
             flash(f'An error occurred: {e}', 'danger')
             app.logger.error(f'Sale error: {e}')
 
-    return render_template('sell_product.html', products=products, now=datetime.datetime.utcnow())
+    return render_template('sell_product.html', products=products, product=product, now=datetime.datetime.utcnow())
 
 @app.route('/delete_product/<int:product_id>', methods=['POST'])
 @role_required('owner') 
