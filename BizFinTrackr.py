@@ -1,14 +1,14 @@
-import datetime
 import os
 import logging
-import psycopg2 # type: ignore
+import datetime
 import socket
+import psycopg2  # type: ignore
 
 from flask import Flask, flash, redirect, render_template, request, session, url_for
 from flask_sqlalchemy import SQLAlchemy
 from functools import wraps
-from sqlalchemy import event, func, and_
-from werkzeug.security import check_password_hash, generate_password_hash
+from sqlalchemy import func, and_
+from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
 
@@ -27,7 +27,7 @@ db = SQLAlchemy(app)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # --- Database Models ---
-
+# --- USER MODEL (Owner Only) ---
 class User(db.Model):
     __tablename__ = 'users'
 
@@ -35,16 +35,11 @@ class User(db.Model):
     username = db.Column(db.String(20), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=True)
     password_hash = db.Column(db.String(512), nullable=False)
-    role = db.Column(db.String(10), nullable=False)  # 'owner' or 'staff'
+    role = db.Column(db.String(10), nullable=False)  # Only 'owner'
     business_id = db.Column(db.Integer, db.ForeignKey('business.id'), nullable=True)
+    owner_code = db.Column(db.String(30), unique=True, nullable=True)
 
-    # ✅ New: Optional staff identifier for staff members only
-    staff_code = db.Column(db.String(10), unique=True, nullable=True)
-
-    # Relationships
-    sales = db.relationship('Sale', backref='staff_user', lazy=True)
-    expenses = db.relationship('Expense', backref='staff_user', lazy=True)
-    inventory_updates = db.relationship('Inventory', backref='staff_user', lazy=True)
+    owned_business = db.relationship('Business', backref='owner_user', uselist=False)
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -53,120 +48,137 @@ class User(db.Model):
         return check_password_hash(self.password_hash, password)
 
     def __repr__(self):
-        return (
-            f"User(username='{self.username}', role='{self.role}', "
-            f"id={self.id}, staff_code='{self.staff_code}', business_id={self.business_id})"
-        )
+        return f"<User(Owner: {self.username}, ID: {self.id})>"
 
+# --- STAFF MODEL ---
+class Staff(db.Model):
+    __tablename__ = 'staff'
+
+    id = db.Column(db.Integer, primary_key=True)
+    staff_code = db.Column(db.String(10), unique=True, nullable=False)  # e.g., SN01
+    name = db.Column(db.String(100), nullable=False)
+    password = db.Column(db.String(128), nullable=False)
+    business_id = db.Column(db.Integer, db.ForeignKey('business.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+
+    business = db.relationship('Business', backref='staff_members')
+
+    sales = db.relationship('Sale', backref='staff', lazy=True)
+    expenses = db.relationship('Expense', backref='staff', lazy=True)
+    inventory_updates = db.relationship('Inventory', backref='staff', lazy=True)
+
+    def set_password(self, password):
+        self.password = generate_password_hash(password)
+
+    def check_password(self, password):
+        return check_password_hash(self.password, password)
+
+    def __repr__(self):
+        return f"<Staff(Name: {self.name}, Code: {self.staff_code})>"
+
+# --- BUSINESS MODEL ---
 class Business(db.Model):
     __tablename__ = 'business'
 
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False)
     owner_id = db.Column(db.Integer, db.ForeignKey('users.id'), unique=True, nullable=False)
-    business_code_prefix = db.Column(db.String(100), unique=True, nullable=True) # e.g., 'BC/2506/D0001'
+    business_code_prefix = db.Column(db.String(100), unique=True, nullable=True)
 
-    # Updated relationship to match the SQL schema and avoid conflicts
-    owner_user = db.relationship(
-    'User',
-    backref=db.backref('owned_business', uselist=False),
-    foreign_keys=[owner_id],
-    lazy='joined'
-)
-
-    users = db.relationship('User', backref='business', lazy=True, foreign_keys='User.business_id') # Renamed staff to users for clarity
     products = db.relationship('Product', backref='business', lazy=True)
     sales = db.relationship('Sale', backref='business', lazy=True)
     expenses = db.relationship('Expense', backref='business', lazy=True)
 
     def __repr__(self):
-        return f"Business('{self.name}', ID: {self.id}, Code: {self.business_code_prefix})"
+        return f"<Business(Name: {self.name}, Code: {self.business_code_prefix})>"
 
-
+# --- PRODUCT MODEL ---
 class Product(db.Model):
     __tablename__ = 'product'
+
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
-    price = db.Column(db.Float, nullable=False) # Selling Price
-    cost = db.Column(db.Float, nullable=False)  # Cost Price
+    price = db.Column(db.Float, nullable=False)
+    cost = db.Column(db.Float, nullable=False)
     in_stock = db.Column(db.Integer, nullable=False, default=0)
-    total_sold = db.Column(db.Integer, nullable=False, default=0) # Cumulative total sold
+    total_sold = db.Column(db.Integer, nullable=False, default=0)
     business_id = db.Column(db.Integer, db.ForeignKey('business.id'), nullable=False)
-    custom_id = db.Column(db.String(50), unique=True, nullable=True) # This can be NULL until generated
+    custom_id = db.Column(db.String(50), unique=True, nullable=True)
 
-    # Ensure product name is unique per business
-    __table_args__ = (db.UniqueConstraint('name', 'business_id', name='_name_business_uc'),)
-
-    # Add cascade to delete related inventory and sales records when a product is deleted
     sales = db.relationship('Sale', backref='product', lazy=True, cascade='all, delete-orphan')
     inventory_items = db.relationship('Inventory', backref='product', lazy=True, cascade='all, delete-orphan')
 
-    def __repr__(self):
-        return f"Product('{self.name}', ID: {self.custom_id if self.custom_id else self.id}, Stock: {self.in_stock})"
-
-
-class Inventory(db.Model):
-    __tablename__ = 'inventory'
-    id = db.Column(db.Integer, primary_key=True)
-    date = db.Column(db.DateTime, nullable=False, default=datetime.datetime.utcnow) # Renamed last_updated to date
-    quantity = db.Column(db.Integer, nullable=False)
-    product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False)
-    staff_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True) # Changed to nullable=True as per SQL
-    # Removed business_id from Inventory model as it's not in the SQL schema for inventory table
+    __table_args__ = (db.UniqueConstraint('name', 'business_id', name='_name_business_uc'),)
 
     def __repr__(self):
-        return f"Inventory(Product ID: {self.product_id}, Quantity: {self.quantity}, Updated: {self.date})"
+        return f"<Product(Name: {self.name}, Stock: {self.in_stock})>"
 
-
+# --- SALE MODEL ---
 class Sale(db.Model):
     __tablename__ = 'sale'
+
     id = db.Column(db.Integer, primary_key=True)
     date = db.Column(db.DateTime, nullable=False, default=datetime.datetime.utcnow)
     quantity = db.Column(db.Integer, nullable=False)
     total_amount = db.Column(db.Float, nullable=False)
     product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False)
     business_id = db.Column(db.Integer, db.ForeignKey('business.id'), nullable=False)
-    staff_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)  # Either owner or staff
+    staff_id = db.Column(db.Integer, db.ForeignKey('staff.id'), nullable=True)
 
     def __repr__(self):
-        return f"Sale(ID: {self.id}, Product ID: {self.product_id}, Qty: {self.quantity})"
+        return f"<Sale(Product ID: {self.product_id}, Quantity: {self.quantity})>"
 
+# --- EXPENSE MODEL ---
 class Expense(db.Model):
     __tablename__ = 'expense'
+
     id = db.Column(db.Integer, primary_key=True)
-    date = db.Column(db.DateTime, nullable=False, default=datetime.datetime.utcnow) # Renamed expense_date to date
+    date = db.Column(db.DateTime, nullable=False, default=datetime.datetime.utcnow)
     amount = db.Column(db.Float, nullable=False)
-    category = db.Column(db.String(100), nullable=True) # Changed to nullable=True and length to 100 as per SQL
-    description = db.Column(db.Text, nullable=True) # Changed to nullable=True and type to Text as per SQL
+    category = db.Column(db.String(100), nullable=True)
+    description = db.Column(db.Text, nullable=True)
     business_id = db.Column(db.Integer, db.ForeignKey('business.id'), nullable=False)
-    staff_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True) # Changed to nullable=True as per SQL
+    staff_id = db.Column(db.Integer, db.ForeignKey('staff.id'), nullable=True)
 
     def __repr__(self):
-        return f"Expense('{self.description}', Amount: {self.amount:.2f}, Date: {self.date})"
+        return f"<Expense(Category: {self.category}, Amount: {self.amount})>"
 
+# --- INVENTORY MODEL ---
+class Inventory(db.Model):
+    __tablename__ = 'inventory'
+
+    id = db.Column(db.Integer, primary_key=True)
+    date = db.Column(db.DateTime, nullable=False, default=datetime.datetime.utcnow)
+    quantity = db.Column(db.Integer, nullable=False)
+    product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False)
+    staff_id = db.Column(db.Integer, db.ForeignKey('staff.id'), nullable=True)
+
+    def __repr__(self):
+        return f"<Inventory(Product ID: {self.product_id}, Quantity: {self.quantity})>"
 
 # --- Decorators for Role-Based Access Control ---
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if 'user_id' not in session: # Changed 'users_id' to 'user_id'
+        if 'user_id' not in session and 'staff_id' not in session:
             flash('Please log in to access this page.', 'warning')
             return redirect(url_for('login'))
         return f(*args, **kwargs)
     return decorated_function
+
 
 def role_required(role):
     def decorator(f):
         @wraps(f)
         @login_required
         def decorated_function(*args, **kwargs):
-            if session.get('role') != role:
-                flash(f'Access denied. You must be a {role.capitalize()} to view this page.', 'danger')
+            session_role = session.get('role')
+            if session_role != role:
+                flash(f'Access denied. You must be a {role.capitalize()} to access this page.', 'danger')
                 return redirect(url_for('dashboard'))
             return f(*args, **kwargs)
         return decorated_function
     return decorator
-
 
 # --- Routes ---
 
@@ -244,186 +256,181 @@ def login():
     if request.method == 'POST':
         identifier = request.form.get('identifier')  # Can be owner email or staff username
         password = request.form.get('password')
-        business_name_input = request.form.get('business_name')  # New field for staff login
+        business_name_input = request.form.get('business_name')  # Required for staff
 
         user = None
+        staff_user = None
         business = None
 
-        # Try to log in as owner (email or username)
+        # --- Try to log in as Owner ---
         if '@' in identifier:
             user = User.query.filter_by(email=identifier, role='owner').first()
 
-        if not user:  # If not found by email or not an owner email, try by username
-            user = User.query.filter_by(username=identifier).first()
+        if user and user.check_password(password):
+            business = Business.query.filter_by(id=user.business_id).first()
+            session['user_id'] = user.id
+            session['role'] = 'owner'
+            session['business_id'] = user.business_id
+            session['username'] = user.username
+            session['business_name'] = business.name if business else 'N/A'
+            flash(f'Welcome, {user.username}! You are logged in as Business Owner of {session["business_name"]}.', 'success')
+            return redirect(url_for('dashboard'))
 
-        if user:
-            if user.role == 'owner':
-                # Safely fetch owned business
-                business = Business.query.filter_by(owner_id=user.id).first()
+        # --- Try to log in as Staff ---
+        if not business_name_input:
+            flash('Business name is required for staff login.', 'danger')
+            return render_template('login.html', now=datetime.datetime.utcnow())
 
-                if business_name_input and business and business.name.lower() != business_name_input.lower():
-                    flash('Business name does not match your owner account. Please ensure it is correct.', 'danger')
-                    return render_template('login.html', now=datetime.datetime.utcnow())
+        # Get business by name
+        business = Business.query.filter(func.lower(Business.name) == func.lower(business_name_input)).first()
+        if not business:
+            flash('Business not found. Please check the name.', 'danger')
+            return render_template('login.html', now=datetime.datetime.utcnow())
 
-            elif user.role == 'staff':
-                if not business_name_input:
-                    flash('Business name is required for staff login.', 'danger')
-                    return render_template('login.html', now=datetime.datetime.utcnow())
+        # Get staff by username and business
+        staff_user = Staff.query.filter_by(name=identifier, business_id=business.id).first()
+        if not staff_user:
+            flash('Staff account not found for this business.', 'danger')
+            return render_template('login.html', now=datetime.datetime.utcnow())
 
-                # Match business name (case-insensitive)
-                business_from_input = Business.query.filter(func.lower(Business.name) == func.lower(business_name_input)).first()
+        if staff_user.password != password:
+            flash('Incorrect staff password.', 'danger')
+            return render_template('login.html', now=datetime.datetime.utcnow())
 
-                if not business_from_input or user.business_id != business_from_input.id:
-                    flash('Invalid business name or staff not associated with this business.', 'danger')
-                    return render_template('login.html', now=datetime.datetime.utcnow())
-
-                business = business_from_input
-
-            # If user and business checks pass, proceed with password check
-            if user.check_password(password):
-                session['user_id'] = user.id
-                session['role'] = user.role
-                session['business_id'] = user.business_id
-                session['username'] = user.username
-                session['business_name'] = business.name if business else 'N/A'
-                flash(f'Welcome, {user.username}! You are logged in as {user.role} of {session["business_name"]}.', 'success')
-                return redirect(url_for('dashboard'))
-            else:
-                flash('Login Unsuccessful. Incorrect password.', 'danger')
-        else:
-            flash('Login Unsuccessful. User not found.', 'danger')
+        # Successful staff login
+        session['staff_id'] = staff_user.id
+        session['role'] = 'staff'
+        session['business_id'] = staff_user.business_id
+        session['username'] = staff_user.name
+        session['business_name'] = business.name
+        flash(f'Welcome, {staff_user.name}! You are logged in as staff of {session["business_name"]}.', 'success')
+        return redirect(url_for('dashboard'))
 
     return render_template('login.html', now=datetime.datetime.utcnow())
 
-
 @app.route('/logout')
 def logout():
-    session.pop('user_id', None) # Changed 'users_id' to 'user_id'
+    session.pop('user_id', None)
+    session.pop('staff_id', None)  # Add this line
     session.pop('role', None)
     session.pop('business_id', None)
-    session.pop('username', None) 
-    # --- MODIFIED: Clear business name from session on logout ---
-    session.pop('business_name', None) 
+    session.pop('username', None)
+    session.pop('business_name', None)
     flash('You have been logged out.', 'info')
     return redirect(url_for('login'))
 
 @app.route('/dashboard', methods=['GET', 'POST'])
 @login_required
 def dashboard():
-    user = User.query.get(session['user_id']) # Changed 'users_id' to 'user_id'
     user_role = session.get('role')
-    user_business_id = session.get('business_id')
+    business_id = session.get('business_id')
 
-    # Initialize variables for template
+    # Default placeholders
     total_revenue = 0.0
     total_expenses = 0.0
     net_profit = 0.0
     net_profit_percentage = 0.0
+    total_daily_sales_count = 0
+    expenses_for_dashboard = []
     
-    products_sold_month = 0 
-    total_daily_sales_count = 0 
-
-    # Default date range for owner's metrics (very broad)
-    start_date_filter = datetime.datetime.min # Default to earliest possible date
-    end_date_filter = datetime.datetime.utcnow() # Default to current date and time
+    # Default date filters (for owner)
+    start_date_filter = datetime.datetime.min
+    end_date_filter = datetime.datetime.utcnow()
 
     if request.method == 'POST':
         start_date_str = request.form.get('start_date')
         end_date_str = request.form.get('end_date')
 
-        if start_date_str:
-            try:
+        try:
+            if start_date_str:
                 start_date_filter = datetime.datetime.strptime(start_date_str, '%Y-%m-%d')
-            except ValueError:
-                flash('Invalid start date format. Please use YYYY-MM-DD.', 'danger')
-                # Keep default or previous valid date
-        
-        if end_date_str:
-            try:
+            if end_date_str:
                 end_date_filter = datetime.datetime.strptime(end_date_str, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
-            except ValueError:
-                flash('Invalid end date format. Please use YYYY-MM-DD.', 'danger')
-                # Keep default or previous valid date
-        
-        if start_date_filter > end_date_filter:
-            flash('Start date cannot be after end date. Resetting date filter.', 'warning')
+            if start_date_filter > end_date_filter:
+                raise ValueError("Start date after end date.")
+        except ValueError:
+            flash('Invalid date range. Resetting filters.', 'warning')
             start_date_filter = datetime.datetime.min
             end_date_filter = datetime.datetime.utcnow()
 
-    # Get string representation for form fields (defaults or user selection)
-    start_date_form = start_date_filter.strftime('%Y-%m-%d') if start_date_filter != datetime.datetime.min else ''
-    end_date_form = end_date_filter.strftime('%Y-%m-%d') if end_date_filter != datetime.datetime.utcnow() else ''
-
-
+    # --- Owner Dashboard ---
     if user_role == 'owner':
-        # Apply date filter to sales and expenses queries
+        user = User.query.get(session['user_id'])
+
         sales_in_range = Sale.query.filter(
-            Sale.business_id == user_business_id,
-            Sale.date >= start_date_filter, # Changed sale_date to date
-            Sale.date <= end_date_filter # Changed sale_date to date
+            Sale.business_id == business_id,
+            Sale.date >= start_date_filter,
+            Sale.date <= end_date_filter
         ).all()
-        total_revenue = sum(sale.quantity * sale.total_amount for sale in sales_in_range) # Changed quantity_sold to quantity and sale_price to total_amount
-        
+
+        total_revenue = sum(sale.quantity * sale.total_amount for sale in sales_in_range)
+
         expenses_in_range = Expense.query.filter(
-            Expense.business_id == user_business_id,
-            Expense.date >= start_date_filter, # Changed expense_date to date
-            Expense.date <= end_date_filter # Changed expense_date to date
+            Expense.business_id == business_id,
+            Expense.date >= start_date_filter,
+            Expense.date <= end_date_filter
         ).all()
-        total_expenses = sum(expense.amount for expense in expenses_in_range)
-        
+
+        total_expenses = sum(exp.amount for exp in expenses_in_range)
         net_profit = total_revenue - total_expenses
+        net_profit_percentage = (net_profit / total_revenue) * 100 if total_revenue > 0 else 0.0
 
-        if total_revenue > 0:
-            net_profit_percentage = (net_profit / total_revenue) * 100
-        else:
-            net_profit_percentage = 0.0 # Avoid division by zero
+        expenses_for_dashboard = Expense.query.filter_by(
+            business_id=business_id
+        ).order_by(Expense.date.desc()).limit(5).all()
 
-
-        expenses_for_dashboard = Expense.query.filter_by(business_id=user_business_id).order_by(Expense.date.desc()).limit(5).all() # Changed expense_date to date
-
+    # --- Staff Dashboard ---
     elif user_role == 'staff':
+        user = Staff.query.get(session['staff_id'])
         today = datetime.date.today()
         start_of_day = datetime.datetime.combine(today, datetime.time.min)
         end_of_day = datetime.datetime.combine(today, datetime.time.max)
 
         staff_sales_today = Sale.query.filter(
             Sale.staff_id == user.id,
-            Sale.business_id == user_business_id,
-            Sale.date >= start_of_day, # Changed sale_date to date
-            Sale.date <= end_of_day # Changed sale_date to date
+            Sale.business_id == business_id,
+            Sale.date >= start_of_day,
+            Sale.date <= end_of_day
         ).all()
-        total_daily_sales_count = len(staff_sales_today) 
-        
-        expenses_for_dashboard = [] # Staff don't see general expenses on dashboard
 
-    # --- MODIFIED: Dashboard recent products list to match products.html format ---
-    products_list = Product.query.filter_by(business_id=user_business_id).order_by(Product.id.desc()).limit(5).all()
-    # Format products for dashboard to match products.html format
-    dashboard_products = []
-    for product in products_list:
-        dashboard_products.append({
-            'product': product,
-            'in_stock': product.in_stock,
-            'total_sold': product.total_sold,
-        })
+        total_daily_sales_count = len(staff_sales_today)
 
-    sales = Sale.query.filter_by(business_id=user_business_id).order_by(Sale.date.desc()).limit(5).all() # Changed sale_date to date
-    
+    # Shared between roles: recent products and sales
+    products_list = Product.query.filter_by(
+        business_id=business_id
+    ).order_by(Product.id.desc()).limit(5).all()
+
+    dashboard_products = [
+        {'product': product, 'in_stock': product.in_stock, 'total_sold': product.total_sold}
+        for product in products_list
+    ]
+
+    sales = Sale.query.filter_by(
+        business_id=business_id
+    ).order_by(Sale.date.desc()).limit(5).all()
+
+    start_date_form = (
+        start_date_filter.strftime('%Y-%m-%d') if start_date_filter != datetime.datetime.min else ''
+    )
+    end_date_form = (
+        end_date_filter.strftime('%Y-%m-%d') if end_date_filter != datetime.datetime.utcnow() else ''
+    )
+
     return render_template('dashboard.html',
-                            user=user,
-                            user_role=user_role,
-                            total_revenue=total_revenue,
-                            total_expenses=total_expenses, 
-                            net_profit=net_profit,
-                            net_profit_percentage=net_profit_percentage, 
-                            total_daily_sales_count=total_daily_sales_count, 
-                            products=dashboard_products, # Changed to dashboard_products
-                            sales=sales, 
-                            expenses=expenses_for_dashboard,
-                            start_date_form=start_date_form, 
-                            end_date_form=end_date_form, 
-                            now=datetime.datetime.utcnow() 
-                            )
+        user=user,
+        user_role=user_role,
+        total_revenue=total_revenue,
+        total_expenses=total_expenses,
+        net_profit=net_profit,
+        net_profit_percentage=net_profit_percentage,
+        total_daily_sales_count=total_daily_sales_count,
+        products=dashboard_products,
+        sales=sales,
+        expenses=expenses_for_dashboard,
+        start_date_form=start_date_form,
+        end_date_form=end_date_form,
+        now=datetime.datetime.utcnow()
+    )
 
 # --- Product Management Routes ---
 
@@ -547,7 +554,7 @@ def restock_product(product_id):
             new_inventory_log = Inventory(
                 product_id=product.id, 
                 quantity=int(quantity_to_add),
-                staff_id=session['user_id'], # Changed 'users_id' to 'user_id'
+                staff_id = session.get('staff_id') if session.get('role') == 'staff' else session.get('user_id'), # Changed 'users_id' to 'user_id'
                 # Removed business_id from Inventory creation as it's not in the SQL schema
             )
             db.session.add(new_inventory_log)
@@ -567,7 +574,6 @@ def restock_product(product_id):
 @app.route('/sell_product', methods=['GET', 'POST'])
 @login_required
 def sell_product():
-    user_id = session.get('user_id')
     user_role = session.get('role')
     business_id = session.get('business_id')
     products = Product.query.filter_by(business_id=business_id).all()
@@ -576,7 +582,6 @@ def sell_product():
         product_id = request.form.get('product_id')
         quantity = request.form.get('quantity')
         price = request.form.get('price')
-        staff_code = request.form.get('staff_code')  # Only needed for staff
 
         if not all([product_id, quantity, price]):
             flash('All fields are required.', 'danger')
@@ -604,20 +609,13 @@ def sell_product():
             return render_template('sell_product.html', products=products)
 
         try:
+            # Get staff_id or owner user_id
             if user_role == 'staff':
-                if not staff_code:
-                    flash('Staff code is required for staff.', 'danger')
-                    return render_template('sell_product.html', products=products)
-
-                staff_user = User.query.filter_by(staff_code=staff_code, role='staff', business_id=business_id).first()
-                if not staff_user:
-                    flash('Invalid staff code.', 'danger')
-                    return render_template('sell_product.html', products=products)
-
-                staff_id = staff_user.id
+                staff_id = session.get('staff_id')
             else:
-                staff_id = user_id  # Owner's user ID
+                staff_id = session.get('user_id')  # Owner
 
+            # Record Sale
             sale = Sale(
                 product_id=product.id,
                 quantity=quantity,
@@ -627,7 +625,7 @@ def sell_product():
             )
             db.session.add(sale)
 
-            # Update stock and log inventory change
+            # Update stock and inventory log
             product.in_stock -= quantity
             product.total_sold += quantity
 
@@ -671,17 +669,11 @@ def delete_product(product_id):
 
 
 # --- Sales Record Section ---
-@app.route('/sales')
-@login_required
-def sales():
-    user_business_id = session.get('business_id')
-    sales = Sale.query.filter_by(business_id=user_business_id).order_by(Sale.date.desc()).all()
-    return render_template('sales.html', sales=sales, now=datetime.datetime.utcnow())
-
 @app.route('/record_sale', methods=['GET', 'POST'])
 @login_required
 def record_sale():
     user_id = session.get('user_id')
+    staff_id = session.get('staff_id')  # This will be None for owners
     business_id = session.get('business_id')
     user_role = session.get('role')
     products = Product.query.filter_by(business_id=business_id).all()
@@ -690,7 +682,6 @@ def record_sale():
         product_id = request.form.get('product_id')
         quantity = request.form.get('quantity_sold')
         sale_price = request.form.get('sale_price')
-        staff_code = request.form.get('staff_code')  # Only needed for staff
 
         if not all([product_id, quantity, sale_price]):
             flash('All fields are required.', 'danger')
@@ -719,37 +710,35 @@ def record_sale():
             return render_template('record_sale.html', products=products, now=datetime.datetime.utcnow())
 
         try:
+            # Determine who is recording the sale
             if user_role == 'staff':
-                if not staff_code:
-                    flash('Staff code is required for staff users.', 'danger')
-                    return render_template('record_sale.html', products=products, now=datetime.datetime.utcnow())
-
-                staff_user = User.query.filter_by(staff_code=staff_code, role='staff', business_id=business_id).first()
-                if not staff_user:
-                    flash('Invalid staff code.', 'danger')
-                    return render_template('record_sale.html', products=products, now=datetime.datetime.utcnow())
-
-                staff_id = staff_user.id
+                if not staff_id:
+                    flash('Unauthorized: staff ID not found in session.', 'danger')
+                    return redirect(url_for('login'))
+                sale_staff_id = staff_id
             else:
-                staff_id = user_id
+                sale_staff_id = user_id
 
+            # Create sale record
             new_sale = Sale(
                 product_id=product.id,
                 quantity=quantity,
                 total_amount=sale_price,
                 business_id=business_id,
-                staff_id=staff_id
+                staff_id=sale_staff_id
             )
             db.session.add(new_sale)
             db.session.flush()
 
+            # Create inventory log
             new_inventory_log = Inventory(
                 product_id=product.id,
                 quantity=-quantity,
-                staff_id=staff_id
+                staff_id=sale_staff_id
             )
             db.session.add(new_inventory_log)
 
+            # Update stock and total sold
             product.in_stock -= quantity
             product.total_sold += quantity
 
@@ -765,17 +754,11 @@ def record_sale():
     return render_template('record_sale.html', products=products, now=datetime.datetime.utcnow())
 
 # --- Expense Records Section ---
-@app.route('/expenses')
-@login_required
-def expenses():
-    user_business_id = session.get('business_id')
-    expenses = Expense.query.filter_by(business_id=user_business_id).order_by(Expense.date.desc()).all() # Changed expense_date to date
-    return render_template('expenses.html', expenses=expenses, now=datetime.datetime.utcnow())
-
 @app.route('/add_expense', methods=['GET', 'POST'])
 @login_required
 def add_expense():
-    user_id = session.get('user_id')
+    user_id = session.get('user_id')         # For owner
+    staff_id = session.get('staff_id')       # For staff
     role = session.get('role')
     business_id = session.get('business_id')
 
@@ -783,7 +766,6 @@ def add_expense():
         description = request.form.get('description')
         amount = request.form.get('amount')
         category = request.form.get('category')
-        staff_code = request.form.get('staff_code')  # Optional (needed for staff)
 
         if not all([description, amount, category]):
             flash('All expense fields are required.', 'danger')
@@ -799,33 +781,27 @@ def add_expense():
             return render_template('add_expense.html', now=datetime.datetime.utcnow())
 
         try:
-            # Determine the correct staff_id
+            # Determine who is making the entry
             if role == 'staff':
-                if not staff_code:
-                    flash('Staff code is required.', 'danger')
-                    return render_template('add_expense.html', now=datetime.datetime.utcnow())
-
-                staff_user = User.query.filter_by(staff_code=staff_code, role='staff', business_id=business_id).first()
-                if not staff_user:
-                    flash('Invalid staff code.', 'danger')
-                    return render_template('add_expense.html', now=datetime.datetime.utcnow())
-
-                staff_id = staff_user.id
+                if not staff_id:
+                    flash('Unauthorized: Staff ID not found in session.', 'danger')
+                    return redirect(url_for('login'))
+                expense_staff_id = staff_id
             else:
-                staff_id = user_id  # Owner making the entry
+                expense_staff_id = user_id
 
             # Create and commit expense
             new_expense = Expense(
                 description=description,
                 amount=amount,
                 category=category,
-                staff_id=staff_id,
+                staff_id=expense_staff_id,
                 business_id=business_id
             )
             db.session.add(new_expense)
             db.session.commit()
 
-            flash(f'Expense "{description}" of ${amount:.2f} recorded successfully!', 'success')
+            flash(f'Expense "{description}" of ₦{amount:.2f} recorded successfully!', 'success')
             return redirect(url_for('expenses'))
 
         except Exception as e:
@@ -835,22 +811,20 @@ def add_expense():
 
     return render_template('add_expense.html', now=datetime.datetime.utcnow())
 
-
 # --- Profile Screen ---
 @app.route('/profile')
 @login_required
 def profile():
-    user = User.query.get(session['user_id']) # Changed 'users_id' to 'user_id'
+    user = User.query.get(session['user_id'])  # Owner only
     business = None
+    staff_members = []
+
     if user.role == 'owner':
         business = Business.query.get(user.business_id)
-    
-    staff_members = []
-    if user.role == 'owner' and business:
-        staff_members = User.query.filter_by(business_id=business.id).filter(User.role=='staff').all()
-    
-    return render_template('profile.html', user=user, business=business, staff_members=staff_members, now=datetime.datetime.utcnow())
+        if business:
+            staff_members = Staff.query.filter_by(business_id=business.id).all()
 
+    return render_template('profile.html', user=user, business=business, staff_members=staff_members, now=datetime.datetime.utcnow())
 
 @app.route('/edit_profile', methods=['GET', 'POST'])
 @login_required 
@@ -957,127 +931,122 @@ def add_staff():
         flash('Only business owners can add staff.', 'danger')
         return redirect(url_for('dashboard'))
 
+    business_id = session.get('business_id')
+
+    # Enforce 3-staff limit
+    if Staff.query.filter_by(business_id=business_id).count() >= 3:
+        flash('You have reached the maximum of 3 staff members for your business.', 'warning')
+        return redirect(url_for('profile'))
+
     if request.method == 'POST':
-        username = request.form.get('username')
+        name = request.form.get('name')
         password = request.form.get('password')
 
-        if not all([username, password]):
+        if not all([name, password]):
             flash('All fields are required.', 'danger')
             return render_template('add_staff.html')
 
-        business_id = session.get('business_id')
+        staff_count = Staff.query.filter_by(business_id=business_id).count()
+        staff_code = f"SN{str(staff_count + 1).zfill(2)}"
 
-        # Count existing staff in this business to generate staff_code
-        staff_count = User.query.filter_by(business_id=business_id, role='staff').count()
-        next_code = f"S{str(staff_count + 1).zfill(2)}"  # e.g. S01, S02, ...
-
-        new_staff = User(
-            username=username,
-            role='staff',
+        new_staff = Staff(
+            name=name,
             business_id=business_id,
-            staff_code=next_code
+            staff_code=staff_code
         )
         new_staff.set_password(password)
 
         try:
             db.session.add(new_staff)
             db.session.commit()
-            flash(f'Staff "{username}" added successfully with staff code {next_code}.', 'success')
-            return redirect(url_for('view_staff'))
+            flash(f'Staff "{name}" added successfully with staff code {staff_code}.', 'success')
+            return redirect(url_for('profile'))
 
         except Exception as e:
             db.session.rollback()
-            flash(f'An error occurred while adding staff: {e}', 'danger')
-            app.logger.error(f"Error adding staff: {e}")
+            flash(f'Error adding staff: {e}', 'danger')
 
     return render_template('add_staff.html')
 
 @app.route('/edit_staff/<int:staff_id>', methods=['GET', 'POST'])
 @role_required('owner')
 def edit_staff(staff_id):
-    staff_member = User.query.get_or_404(staff_id)
+    staff_member = Staff.query.get_or_404(staff_id)
 
-    if staff_member.business_id != session.get('business_id') or staff_member.role != 'staff':
-        flash("Access denied. You can only edit staff members from your own business.", "danger")
-        return redirect(url_for('profile'))
-    
-    if staff_member.id == session.get('user_id'): # Changed 'users_id' to 'user_id'
-        flash("You cannot edit your own profile via staff management. Use 'Edit Profile' instead.", "warning")
+    if staff_member.business_id != session.get('business_id'):
+        flash("Access denied. You can only edit staff in your business.", "danger")
         return redirect(url_for('profile'))
 
     if request.method == 'POST':
-        new_username = request.form.get('username')
+        new_name = request.form.get('name')
         new_password = request.form.get('new_password')
         confirm_password = request.form.get('confirm_password')
 
-        if not new_username:
-            flash('Username cannot be empty.', 'danger')
+        if not new_name:
+            flash('Staff name cannot be empty.', 'danger')
             return render_template('edit_staff.html', staff_member=staff_member, now=datetime.datetime.utcnow())
 
-        existing_username_in_business = User.query.filter(
-            User.username == new_username,
-            User.business_id == session.get('business_id'),
-            User.id != staff_member.id
+        # Ensure uniqueness of staff name in same business
+        existing_name = Staff.query.filter(
+            Staff.name == new_name,
+            Staff.business_id == staff_member.business_id,
+            Staff.id != staff_member.id
         ).first()
-        if existing_username_in_business:
-            flash('This username is already taken by another staff member in your business. Choose a different one.', 'danger')
+        if existing_name:
+            flash('Another staff with this name already exists in your business.', 'danger')
             return render_template('edit_staff.html', staff_member=staff_member, now=datetime.datetime.utcnow())
 
-        staff_member.username = new_username
+        staff_member.name = new_name
 
-        if new_password: 
+        if new_password:
             if new_password != confirm_password:
-                flash('New password and confirmation do not match.', 'danger')
-                return render_template('edit_staff.html', staff_member=staff_member, now=datetime.datetime.utcnow())
+                flash('Passwords do not match.', 'danger')
+                return render_template('edit_staff.html', staff_member=staff_member)
             if len(new_password) < 6:
-                flash('New password must be at least 6 characters long.', 'danger')
-                return render_template('edit_staff.html', staff_member=staff_member, now=datetime.datetime.utcnow())
+                flash('Password must be at least 6 characters.', 'danger')
+                return render_template('edit_staff.html', staff_member=staff_member)
             staff_member.set_password(new_password)
-        
+
         try:
             db.session.commit()
-            flash(f'Staff member "{staff_member.username}" details updated successfully!', 'success')
+            flash('Staff updated successfully.', 'success')
             return redirect(url_for('profile'))
         except Exception as e:
             db.session.rollback()
-            flash(f'An error occurred while updating staff member: {e}', 'danger')
-            app.logger.error(f"Error editing staff {staff_id}: {e}")
+            flash(f'Error updating staff: {e}', 'danger')
 
     return render_template('edit_staff.html', staff_member=staff_member, now=datetime.datetime.utcnow())
-
 
 @app.route('/delete_staff/<int:staff_id>', methods=['POST'])
 @role_required('owner')
 def delete_staff(staff_id):
-    staff_member = User.query.get_or_404(staff_id)
+    staff_member = Staff.query.get_or_404(staff_id)
 
-    if staff_member.business_id != session.get('business_id') or staff_member.role != 'staff':
-        flash("Access denied. You can only delete staff members from your own business.", "danger")
-        return redirect(url_for('profile'))
-
-    if staff_member.id == session.get('user_id'): # Changed 'users_id' to 'user_id'
-        flash("You cannot delete your own account from staff management.", "danger")
+    if staff_member.business_id != session.get('business_id'):
+        flash("Access denied. You can only delete staff in your business.", "danger")
         return redirect(url_for('profile'))
 
     try:
         db.session.delete(staff_member)
         db.session.commit()
-        flash(f'Staff member "{staff_member.username}" has been deleted.', 'success')
+        flash(f'Staff "{staff_member.name}" deleted.', 'success')
     except Exception as e:
         db.session.rollback()
-        flash(f'An error occurred while deleting staff member: {e}', 'danger')
-        app.logger.error(f"Error deleting staff member: {e}")
-    
+        flash(f'Error deleting staff: {e}', 'danger')
+
     return redirect(url_for('profile'))
 
-
 # --- Report Screen (Accessed from Profile) ---
+from flask import render_template, request, session, flash
+from sqlalchemy import func
+import datetime
+
 @app.route('/reports', methods=['GET', 'POST'])
 @role_required('owner') 
 def reports():
     user_business_id = session.get('business_id')
 
-    # Default date range for reports
+    # Default to all time
     start_date_filter = datetime.datetime.min
     end_date_filter = datetime.datetime.utcnow()
 
@@ -1085,94 +1054,88 @@ def reports():
         start_date_str = request.form.get('start_date')
         end_date_str = request.form.get('end_date')
 
-        if start_date_str:
-            try:
+        try:
+            if start_date_str:
                 start_date_filter = datetime.datetime.strptime(start_date_str, '%Y-%m-%d')
-            except ValueError:
-                flash('Invalid start date format. Please use YYYY-MM-DD.', 'danger')
-                start_date_filter = datetime.datetime.min # Reset to default on error
-        
-        if end_date_str:
-            try:
-                # Set end of day for the selected date
+            if end_date_str:
                 end_date_filter = datetime.datetime.strptime(end_date_str, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
-            except ValueError:
-                flash('Invalid end date format. Please use YYYY-MM-DD.', 'danger')
-                end_date_filter = datetime.datetime.utcnow() # Reset to default on error
-        
+        except ValueError:
+            flash('Invalid date format. Please use YYYY-MM-DD.', 'danger')
+            start_date_filter = datetime.datetime.min
+            end_date_filter = datetime.datetime.utcnow()
+
         if start_date_filter > end_date_filter:
-            flash('Start date cannot be after end date. Displaying all available data.', 'warning')
+            flash('Start date cannot be after end date. Displaying all data.', 'warning')
             start_date_filter = datetime.datetime.min
             end_date_filter = datetime.datetime.utcnow()
 
     # --- General Financial Metrics ---
     sales_in_range = Sale.query.filter(
         Sale.business_id == user_business_id,
-        Sale.date >= start_date_filter, # Changed sale_date to date
-        Sale.date <= end_date_filter # Changed sale_date to date
+        Sale.date >= start_date_filter,
+        Sale.date <= end_date_filter
     ).all()
-    total_revenue = sum(sale.quantity * sale.total_amount for sale in sales_in_range) # Changed quantity_sold to quantity and sale_price to total_amount
-    total_cost_of_goods_sold = sum(sale.quantity * sale.product.cost for sale in sales_in_range) # Assuming product.cost is available via relationship
+
+    total_revenue = sum(sale.quantity * sale.total_amount for sale in sales_in_range)
+    total_cost_of_goods_sold = sum(sale.quantity * sale.product.cost for sale in sales_in_range)
     gross_profit = total_revenue - total_cost_of_goods_sold
-    
+
     expenses_in_range = Expense.query.filter(
         Expense.business_id == user_business_id,
-        Expense.date >= start_date_filter, # Changed expense_date to date
-        Expense.date <= end_date_filter # Changed expense_date to date
+        Expense.date >= start_date_filter,
+        Expense.date <= end_date_filter
     ).all()
-    total_expenses = sum(expense.amount for expense in expenses_in_range)
-    
+    total_expenses = sum(exp.amount for exp in expenses_in_range)
+
     net_profit = total_revenue - total_expenses
+    net_profit_percentage = (net_profit / total_revenue) * 100 if total_revenue > 0 else 0.0
 
-    if total_revenue > 0:
-        net_profit_percentage = (net_profit / total_revenue) * 100
-    else:
-        net_profit_percentage = 0.0
-
-
-    # --- Sales by Product Report ---
+    # --- Sales by Product ---
     sales_by_product_query = db.session.query(
         Product.name,
-        func.sum(Sale.quantity).label('total_quantity_sold'), # Changed quantity_sold to quantity
-        func.sum(Sale.quantity * Sale.total_amount).label('total_revenue_from_product') # Changed quantity_sold to quantity and sale_price to total_amount
+        func.sum(Sale.quantity).label('total_quantity_sold'),
+        func.sum(Sale.quantity * Sale.total_amount).label('total_revenue_from_product')
     ).join(Sale).filter(
         Sale.business_id == user_business_id,
-        Sale.date >= start_date_filter, # Changed sale_date to date
-        Sale.date <= end_date_filter # Changed sale_date to date
-    ).group_by(Product.name).order_by(func.sum(Sale.quantity).desc()).all() # Changed quantity_sold to quantity
-    
-    sales_by_product = [{'product_name': s.name, 'quantity_sold': s.total_quantity_sold, 'revenue': s.total_revenue_from_product} 
-                        for s in sales_by_product_query]
+        Sale.date >= start_date_filter,
+        Sale.date <= end_date_filter
+    ).group_by(Product.name).order_by(func.sum(Sale.quantity).desc()).all()
 
-    # --- Expenses by Category Report ---
+    sales_by_product = [
+        {'product_name': s.name, 'quantity_sold': s.total_quantity_sold, 'revenue': s.total_revenue_from_product}
+        for s in sales_by_product_query
+    ]
+
+    # --- Expenses by Category ---
     expenses_by_category_query = db.session.query(
         Expense.category,
         func.sum(Expense.amount).label('total_amount')
     ).filter(
         Expense.business_id == user_business_id,
-        Expense.date >= start_date_filter, # Changed expense_date to date
-        Expense.date <= end_date_filter # Changed expense_date to date
+        Expense.date >= start_date_filter,
+        Expense.date <= end_date_filter
     ).group_by(Expense.category).order_by(func.sum(Expense.amount).desc()).all()
 
-    expenses_by_category = [{'category': e.category, 'total_amount': e.total_amount}
-                            for e in expenses_by_category_query]
+    expenses_by_category = [
+        {'category': e.category, 'total_amount': e.total_amount}
+        for e in expenses_by_category_query
+    ]
 
-    # Get string representation for form fields (defaults or user selection)
+    # Prepare form inputs to retain values
     start_date_form = start_date_filter.strftime('%Y-%m-%d') if start_date_filter != datetime.datetime.min else ''
-    end_date_form = end_date_filter.strftime('%Y-%m-%d') if end_date_filter != datetime.datetime.utcnow() else ''
-    
+    end_date_form = end_date_filter.strftime('%Y-%m-%d') if end_date_filter.date() != datetime.datetime.utcnow().date() else ''
+
     return render_template('reports.html',
-                            total_revenue=total_revenue,
-                            total_expenses=total_expenses,
-                            net_profit=net_profit,
-                            gross_profit=gross_profit, 
-                            net_profit_percentage=net_profit_percentage,
-                            sales_by_product=sales_by_product,
-                            expenses_by_category=expenses_by_category,
-                            start_date_form=start_date_form,
-                            end_date_form=end_date_form,
-                            now=datetime.datetime.utcnow()
-                            )
+                           total_revenue=total_revenue,
+                           total_expenses=total_expenses,
+                           net_profit=net_profit,
+                           gross_profit=gross_profit, 
+                           net_profit_percentage=net_profit_percentage,
+                           sales_by_product=sales_by_product,
+                           expenses_by_category=expenses_by_category,
+                           start_date_form=start_date_form,
+                           end_date_form=end_date_form,
+                           now=datetime.datetime.utcnow())
 
 @app.route('/init-db')
 def init_db():
