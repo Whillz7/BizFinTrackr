@@ -804,7 +804,7 @@ def add_expense():
             amount = float(amount)
             if amount <= 0:
                 flash('Amount must be positive.', 'danger')
-                return redirect(url_for('expenses'))
+                return redirect(url_for('add_expenses'))
 
             # Get staff ID only if user is a staff
             if role == 'staff':
