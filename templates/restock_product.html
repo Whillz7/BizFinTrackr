@@ -10,12 +10,12 @@
                 <p class="text-center">Current Stock: <strong>{{ current_stock }}</strong> units</p>
                 
                 <form action="{{ url_for('restock_product', product_id=product.id) }}" method="POST">
-                    <div class="form-group">
+                    <div class="form-group mb-3">
                         <label for="quantity">Quantity to Add:</label>
                         <input type="number" class="form-control" id="quantity" name="quantity" min="1" required>
                     </div>
-                    <button type="submit" class="btn btn-primary">Restock</button>
-                    <a href="{{ url_for('products') }}" class="btn btn-secondary">Cancel</a>
+                    <button type="submit" class="btn btn-primary w-100">Restock</button>
+                    <a href="{{ url_for('products') }}" class="btn btn-secondary w-100 mt-2">Cancel</a>
                 </form>
             </div>
         </div>

@@ -1,5 +1,7 @@
 {% extends "auth_base.html" %}
+
 {% block title %}Expenses Records{% endblock %}
+
 {% block content %}
 <h1 class="mb-4">Expenses Records</h1>
 <a href="{{ url_for('add_expense') }}" class="btn btn-success mb-3">Add New Expense</a>
@@ -13,6 +15,7 @@
                 <th>Amount</th>
                 <th>Category</th>
                 <th>Date</th>
+                <th>Staff</th>
             </tr>
         </thead>
         <tbody>
@@ -22,6 +25,7 @@
                 <td>${{ "%.2f"|format(expense.amount) }}</td>
                 <td>{{ expense.category }}</td>
                 <td>{{ expense.date.strftime('%Y-%m-%d') }}</td>
+                <td>{{ expense.staff.name if expense.staff else 'Owner' }}</td>
             </tr>
             {% endfor %}
         </tbody>

@@ -7,17 +7,25 @@
             <div class="card-body">
                 <h2 class="card-title text-center mb-4">Add New Staff Member</h2>
                 <p class="text-center text-muted">Current staff: {{ current_staff_count }} / {{ staff_limit }}</p>
-                
+
                 {% if current_staff_count >= staff_limit %}
-                <div class="alert alert-warning text-center" role="alert">
-                    You have reached the maximum number of staff members for your business ({{ staff_limit }}).
-                </div>
+                    <div class="alert alert-warning text-center" role="alert">
+                        You have reached the maximum number of staff members for your business ({{ staff_limit }}).
+                    </div>
                 {% endif %}
+
                 <form method="POST">
-                    <input type="text" name="username" placeholder="Staff Name" required>
-                    <input type="password" name="password" placeholder="Password" required>
-                    <button type="submit">Add Staff</button>
-                  </form>               
+                    <div class="mb-3">
+                        <label for="username" class="form-label">Staff Name:</label>
+                        <input type="text" class="form-control" id="username" name="username" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="password" class="form-label">Password:</label>
+                        <input type="password" class="form-control" id="password" name="password" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100" {% if current_staff_count >= staff_limit %} disabled {% endif %}>Add Staff</button>
+                    <a href="{{ url_for('staff_list') }}" class="btn btn-secondary w-100 mt-2">Back to Staff List</a>
+                </form>
             </div>
         </div>
     </div>
