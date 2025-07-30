@@ -787,6 +787,12 @@ def expenses():
 @app.route('/add_expense', methods=['GET', 'POST'])
 @login_required
 def add_expense():
+    # Determine if user is staff or owner
+    if session.get('role') == 'staff':
+        staff_id = session.get('staff_id')  # This should be a valid staff.id
+    else:
+        staff_id = None  # Owner – don't set a foreign key to staff table
+
     user_id = session.get('user_id')         # For owner
     staff_id = session.get('staff_id')       # For staff
     role = session.get('role')
@@ -821,14 +827,16 @@ def add_expense():
                 expense_staff_id = user_id
 
             # Create and commit expense
-            new_expense = Expense(
-                description=description,
-                amount=amount,
-                category=category,
-                staff_id=expense_staff_id,
-                business_id=business_id
-            )
-            db.session.add(new_expense)
+                expense = Expense(
+                    date=datetime.utcnow(),
+                    amount=amount,
+                    category=category,
+                    description=description,
+                    business_id=session['business_id'],
+                    staff_id=staff_id  # This will be None for owner
+                    )
+            
+            db.session.add(expense)
             db.session.commit()
 
             flash(f'Expense "{description}" of ₦{amount:.2f} recorded successfully!', 'success')
