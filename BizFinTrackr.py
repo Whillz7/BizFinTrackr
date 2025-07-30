@@ -761,6 +761,13 @@ def record_sale():
     return render_template('record_sale.html', products=products, now=datetime.datetime.utcnow())
 
 # --- Expense Records Section ---
+@app.route('/expenses')
+@login_required
+def expenses():
+    user_business_id = session.get('business_id')
+    expenses = Expense.query.filter_by(business_id=user_business_id).order_by(Expense.date.desc()).all() # Changed expense_date to date
+    return render_template('expenses.html', expenses=expenses, now=datetime.datetime.utcnow())
+
 @app.route('/add_expense', methods=['GET', 'POST'])
 @login_required
 def add_expense():
