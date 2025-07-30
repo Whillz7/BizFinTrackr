@@ -27,10 +27,6 @@ db = SQLAlchemy(app)
 # Configure logging for better error visibility
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-@app.context_processor
-def inject_now():
-    return {'now': datetime.utcnow()}
-
 # --- Database Models ---
 # --- USER MODEL (Owner Only) ---
 class User(db.Model):
@@ -1176,6 +1172,10 @@ def init_db():
     with app.app_context():
         db.create_all()
     return "Database tables created!"
+
+@app.context_processor
+def inject_now():
+    return {'now': datetime.utcnow()}
 
 # --- Run the Application ---
 if __name__ == '__main__':
