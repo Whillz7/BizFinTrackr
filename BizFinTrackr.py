@@ -60,7 +60,7 @@ class Staff(db.Model):
     name = db.Column(db.String(100), nullable=False)
     password = db.Column(db.String(128), nullable=False)
     business_id = db.Column(db.Integer, db.ForeignKey('business.id'), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     business = db.relationship('Business', backref='staff_members')
 
