@@ -39,7 +39,7 @@ class User(db.Model):
     business_id = db.Column(db.Integer, db.ForeignKey('business.id'), nullable=True)
     owner_code = db.Column(db.String(30), unique=True, nullable=True)
 
-    owned_business = db.relationship('Business', backref='owner_user', uselist=False)
+    owned_business = db.relationship('Business', backref='owner', foreign_keys='Business.owner_id')
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
