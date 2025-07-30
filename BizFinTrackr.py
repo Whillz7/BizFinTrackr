@@ -829,7 +829,7 @@ def add_expense():
 
             # Create and commit expense
                 expense = Expense(
-                    date=datetime.utcnow(),
+                    now=datetime.datetime.utcnow(),
                     amount=amount,
                     category=category,
                     description=description,
