@@ -669,6 +669,13 @@ def delete_product(product_id):
 
 
 # --- Sales Record Section ---
+@app.route('/sales')
+@login_required
+def sales():
+    user_business_id = session.get('business_id')
+    sales = Sale.query.filter_by(business_id=user_business_id).order_by(Sale.date.desc()).all()
+    return render_template('sales.html', sales=sales, now=datetime.datetime.utcnow())
+
 @app.route('/record_sale', methods=['GET', 'POST'])
 @login_required
 def record_sale():
