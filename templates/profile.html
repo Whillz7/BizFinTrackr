@@ -69,7 +69,22 @@
                 {% else %}
                 <p>No staff members added yet. Click "Add New Staff Member" to add one.</p>
                 {% endif %}
+            
+                {% elif role == 'staff' %}
+                    <p><strong>Name:</strong> {{ staff.name }}</p>
+                    <p><strong>Role:</strong> Staff</p>
+                    <p><strong>Staff Code:</strong> {{ staff.staff_code }}</p>
+                    <p><strong>Staff ID:</strong> {{ staff.id }}</p>
+                    {% if business %}
+                        <hr>
+                        <h3>Business Details</h3>
+                        <p><strong>Business Name:</strong> {{ business.name }}</p>
+                        <p><strong>Business ID:</strong> {{ business.id }}</p>
+                        <p><strong>Business Code:</strong> {{ business.business_code_prefix }}</p>
+                    {% endif %}
+                    <p><strong>Joined On:</strong> {{ staff.created_at.strftime('%B %d, %Y') }}</p>
                 {% endif %}
+            {% endif %}
                 
                 <hr>
                 <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Back to Dashboard</a>
