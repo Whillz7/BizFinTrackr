@@ -301,7 +301,7 @@ def login():
         session['staff_id'] = staff_user.id
         session['role'] = 'staff'
         session['business_id'] = staff_user.business_id
-        session['username'] = staff_user.name
+        session['name'] = staff_user.name
         session['business_name'] = business.name
         flash(f'Welcome, {staff_user.name}! You are logged in as staff of {session["business_name"]}.', 'success')
         return redirect(url_for('dashboard'))
