@@ -790,16 +790,12 @@ def expenses():
 @login_required
 def add_expense():
     import datetime
-        # Determine if user is staff or owner
-    if session.get('role') == 'staff':
-        staff_id = session.get('staff_id')  # This should be a valid staff.id
-    else:
-        staff_id = None  # Owner – don't set a foreign key to staff table
 
-    user_id = session.get('user_id')         # For owner
-    staff_id = session.get('staff_id')       # For staff
+    # Determine role and relevant IDs
     role = session.get('role')
     business_id = session.get('business_id')
+    user_id = session.get('user_id')         # For owner
+    staff_id = session.get('staff_id')       # For staff
 
     if request.method == 'POST':
         description = request.form.get('description')
@@ -820,25 +816,25 @@ def add_expense():
             return render_template('add_expense.html', now=datetime.datetime.utcnow())
 
         try:
-            # Determine who is making the entry
+            # Determine staff_id for Expense entry
             if role == 'staff':
                 if not staff_id:
                     flash('Unauthorized: Staff ID not found in session.', 'danger')
                     return redirect(url_for('login'))
                 expense_staff_id = staff_id
             else:
-                expense_staff_id = user_id
+                expense_staff_id = None  # Owner action
 
             # Create and commit expense
-                expense = Expense(
-                    date=datetime.datetime.utcnow(),
-                    amount=amount,
-                    category=category,
-                    description=description,
-                    business_id=session['business_id'],
-                    staff_id=staff_id  # This will be None for owner
-                    )
-            
+            expense = Expense(
+                date=datetime.datetime.utcnow(),
+                amount=amount,
+                category=category,
+                description=description,
+                business_id=business_id,
+                staff_id=expense_staff_id
+            )
+
             db.session.add(expense)
             db.session.commit()
 
