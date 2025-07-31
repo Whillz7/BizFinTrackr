@@ -625,8 +625,8 @@ def sell_product():
             if user_role == 'staff':
                 staff_id = session.get('staff_id')
             else:
-                staff_id = session.get('user_id')  # Owner
-
+                staff_id = None  
+                
             # Record Sale
             sale = Sale(
                 product_id=product.id,
