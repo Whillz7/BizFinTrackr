@@ -593,7 +593,7 @@ def sell_product():
     if request.method == 'POST':
         product_id = request.form.get('product_id')
         quantity = request.form.get('quantity')
-        price = request.form.get('price')
+        price = request.form.get('sale_price')
 
         if not all([product_id, quantity, price]):
             flash('All fields are required.', 'danger')
@@ -631,7 +631,7 @@ def sell_product():
             sale = Sale(
                 product_id=product.id,
                 quantity=quantity,
-                total_amount=price,
+                total_amount=quantity * price,
                 business_id=business_id,
                 staff_id=staff_id
             )
