@@ -852,16 +852,31 @@ def add_expense():
 @app.route('/profile')
 @login_required
 def profile():
-    user = User.query.get(session['user_id'])  # Owner only
-    business = None
-    staff_members = []
+    role = session.get('role')
 
-    if user.role == 'owner':
+    if role == 'owner':
+        user = User.query.get(session['user_id'])
         business = Business.query.get(user.business_id)
-        if business:
-            staff_members = Staff.query.filter_by(business_id=business.id).all()
+        staff_members = Staff.query.filter_by(business_id=business.id).all() if business else []
+        return render_template('profile.html',
+                               user=user,
+                               role=role,
+                               business=business,
+                               staff_members=staff_members,
+                               now=datetime.datetime.utcnow())
 
-    return render_template('profile.html', user=user, business=business, staff_members=staff_members, now=datetime.datetime.utcnow())
+    elif role == 'staff':
+        staff = Staff.query.get(session.get('staff_id'))
+        business = Business.query.get(staff.business_id) if staff else None
+        return render_template('profile.html',
+                               staff=staff,
+                               role=role,
+                               business=business,
+                               now=datetime.datetime.utcnow())
+
+    else:
+        flash("Unauthorized access.", "danger")
+        return redirect(url_for('login'))
 
 @app.route('/edit_profile', methods=['GET', 'POST'])
 @login_required 
