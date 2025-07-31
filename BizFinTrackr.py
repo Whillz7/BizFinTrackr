@@ -7,6 +7,7 @@ import psycopg2  # type: ignore
 from flask import Flask, flash, redirect, render_template, request, session, url_for
 from flask_sqlalchemy import SQLAlchemy
 from functools import wraps
+from passlib.hash import scrypt
 from sqlalchemy import func, and_
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -68,10 +69,11 @@ class Staff(db.Model):
     inventory_updates = db.relationship('Inventory', backref='staff', lazy=True)
 
     def set_password(self, password):
-        self.password = generate_password_hash(password)
+        self.password = scrypt.hash(password)
 
     def check_password(self, password):
-        return check_password_hash(self.password, password)
+        return scrypt.verify(password, self.password)
+
 
     def __repr__(self):
         return f"<Staff(Name: {self.name}, Code: {self.staff_code})>"
@@ -293,7 +295,7 @@ def login():
             flash('Staff account not found for this business.', 'danger')
             return render_template('login.html', now=datetime.datetime.utcnow())
 
-        if staff_user.password != password:
+        if not staff_user.check_password(password):
             flash('Incorrect staff password.', 'danger')
             return render_template('login.html', now=datetime.datetime.utcnow())
 
