@@ -626,7 +626,7 @@ def sell_product():
                 staff_id = session.get('staff_id')
             else:
                 staff_id = None  
-                
+
             # Record Sale
             sale = Sale(
                 product_id=product.id,
@@ -971,9 +971,10 @@ def add_staff():
         return redirect(url_for('dashboard'))
 
     business_id = session.get('business_id')
+    current_staff_count = Staff.query.filter_by(business_id=business_id).count()
+    staff_limit = 3
 
-    # Enforce 3-staff limit
-    if Staff.query.filter_by(business_id=business_id).count() >= 3:
+    if current_staff_count >= staff_limit:
         flash('You have reached the maximum of 3 staff members for your business.', 'warning')
         return redirect(url_for('profile'))
 
@@ -983,10 +984,11 @@ def add_staff():
 
         if not all([name, password]):
             flash('All fields are required.', 'danger')
-            return render_template('add_staff.html')
+            return render_template('add_staff.html',
+                                   current_staff_count=current_staff_count,
+                                   staff_limit=staff_limit)
 
-        staff_count = Staff.query.filter_by(business_id=business_id).count()
-        staff_code = f"SN{str(staff_count + 1).zfill(2)}"
+        staff_code = f"SN{str(current_staff_count + 1).zfill(2)}"
 
         new_staff = Staff(
             name=name,
@@ -1005,7 +1007,9 @@ def add_staff():
             db.session.rollback()
             flash(f'Error adding staff: {e}', 'danger')
 
-    return render_template('add_staff.html')
+    return render_template('add_staff.html',
+                           current_staff_count=current_staff_count,
+                           staff_limit=staff_limit)
 
 @app.route('/edit_staff/<int:staff_id>', methods=['GET', 'POST'])
 @role_required('owner')
