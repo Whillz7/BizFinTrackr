@@ -24,7 +24,7 @@
                         <input type="password" class="form-control" id="password" name="password" required>
                     </div>
                     <button type="submit" class="btn btn-primary w-100" {% if current_staff_count >= staff_limit %} disabled {% endif %}>Add Staff</button>
-                    <a href="{{ url_for('staff_list') }}" class="btn btn-secondary w-100 mt-2">Back to Staff List</a>
+                    <a href="{{ url_for('profile') }}" class="btn btn-secondary w-100 mt-2">Back to Profile</a>
                 </form>
             </div>
         </div>
