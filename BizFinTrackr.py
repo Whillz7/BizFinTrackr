@@ -108,7 +108,7 @@ class Product(db.Model):
     custom_id = db.Column(db.String(50), unique=True, nullable=True)
 
     sales = db.relationship('Sale', backref='product', lazy=True, cascade='all, delete-orphan')
-    inventory_items = db.relationship('Inventory', back_populates='product', lazy=True, cascade='all, delete-orphan')
+    inventory_logs = db.relationship('Inventory', back_populates='product', lazy=True, cascade='all, delete-orphan')
 
     __table_args__ = (db.UniqueConstraint('name', 'business_id', name='_name_business_uc'),)
 
