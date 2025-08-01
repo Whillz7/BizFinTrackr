@@ -66,7 +66,7 @@ class Staff(db.Model):
 
     sales = db.relationship('Sale', backref='staff', lazy=True)
     expenses = db.relationship('Expense', backref='staff', lazy=True)
-    inventory_updates = db.relationship('Inventory', backref='staff', lazy=True)
+    inventory_updates = db.relationship('Inventory', back_populates='staff', lazy=True)
 
     def set_password(self, password):
         self.password = scrypt.hash(password)
@@ -157,7 +157,7 @@ class Inventory(db.Model):
     business_id = db.Column(db.Integer, db.ForeignKey('business.id'), nullable=False)
 
     product = db.relationship('Product', backref='inventory_logs')
-    staff = db.relationship('Staff', backref='inventory_logs')
+    staff = db.relationship('Staff', back_populates='inventory_logs')
     business = db.relationship('Business', backref='inventory_logs')
 
     def __repr__(self):
@@ -557,12 +557,15 @@ def restock_product(product_id):
         
         try:
             product.in_stock += int(quantity_to_add)
+
+            staff_id = session.get('staff_id') if session.get('role') == 'staff' else None
             
             new_inventory_log = Inventory(
                 product_id=product.id, 
                 quantity=int(quantity_to_add),
                 staff_id = session.get('staff_id') if session.get('role') == 'staff' else session.get('user_id'), # Changed 'users_id' to 'user_id'
-                business_id=session['business_id']
+                business_id=session['business_id'],
+                date=datetime.datetime.utcnow()
             )
             db.session.add(new_inventory_log)
             
