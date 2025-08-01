@@ -8,7 +8,7 @@ from flask import Flask, flash, redirect, render_template, request, session, url
 from flask_sqlalchemy import SQLAlchemy
 from functools import wraps
 from passlib.hash import scrypt
-from sqlalchemy import func, and_
+from sqlalchemy import Index, func, and_
 from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
@@ -66,7 +66,7 @@ class Staff(db.Model):
 
     sales = db.relationship('Sale', backref='staff', lazy=True)
     expenses = db.relationship('Expense', backref='staff', lazy=True)
-    inventory_updates = db.relationship('Inventory', back_populates='staff', lazy=True)
+    inventory_logs = db.relationship('Inventory', back_populates='staff', lazy=True)
 
     def set_password(self, password):
         self.password = scrypt.hash(password)
@@ -160,9 +160,13 @@ class Inventory(db.Model):
     staff = db.relationship('Staff', back_populates='inventory_logs')
     business = db.relationship('Business', backref='inventory_logs')
 
+    __table_args__ = (
+        db.Index('idx_inventory_business', 'business_id'),
+    )
+
     def __repr__(self):
         return f"<Inventory(Product ID: {self.product_id}, Quantity: {self.quantity})>"
-
+    
 # --- Decorators for Role-Based Access Control ---
 def login_required(f):
     @wraps(f)
@@ -186,6 +190,12 @@ def role_required(role):
             return f(*args, **kwargs)
         return decorated_function
     return decorator
+
+def get_current_business_id():
+    if session.get('role') == 'owner':
+        return User.query.get(session['user_id']).business_id
+    elif session.get('role') == 'staff':
+        return Staff.query.get(session['staff_id']).business_id
 
 # --- Routes ---
 
@@ -331,6 +341,7 @@ def logout():
 def dashboard():
     user_role = session.get('role')
     business_id = session.get('business_id')
+    business_id = get_current_business_id()
 
     # Default placeholders
     total_revenue = 0.0
@@ -445,6 +456,8 @@ def dashboard():
 @login_required
 def products():
     user_business_id = session.get('business_id')
+    business_id = get_current_business_id()
+
     # --- MODIFIED: Get search query from URL parameter for product search ---
     search_query = request.args.get('search', '').strip() 
 
@@ -475,6 +488,8 @@ def products():
 @role_required('owner')
 def add_product():
     user_business_id = session.get('business_id')
+    business_id = get_current_business_id()
+
     if request.method == 'POST':
         name = request.form.get('product_name') 
         price = request.form.get('selling_price')    
@@ -542,6 +557,8 @@ def add_product():
 @app.route('/restock_product/<int:product_id>', methods=['GET', 'POST'])
 @login_required 
 def restock_product(product_id):
+    business_id = get_current_business_id()
+
     product = Product.query.get_or_404(product_id)
     if product.business_id != session.get('business_id'):
         flash("Access denied to this product.", "danger")
@@ -586,6 +603,7 @@ def sell_product():
     import datetime
     user_role = session.get('role')
     business_id = session.get('business_id')
+    business_id = get_current_business_id()
     products = Product.query.filter_by(business_id=business_id).all()
 
     # Handle optional product_id in GET request
@@ -673,6 +691,7 @@ def sell_product():
 @app.route('/delete_product/<int:product_id>', methods=['POST'])
 @role_required('owner') 
 def delete_product(product_id):
+    business_id = get_current_business_id()
     product = Product.query.get_or_404(product_id)
 
     if product.business_id != session.get('business_id'):
@@ -696,6 +715,7 @@ def delete_product(product_id):
 @login_required
 def sales():
     user_business_id = session.get('business_id')
+    business_id = get_current_business_id()
     sales = Sale.query.filter_by(business_id=user_business_id).order_by(Sale.date.desc()).all()
     return render_template('sales.html', sales=sales, now=datetime.datetime.utcnow())
 
@@ -705,6 +725,7 @@ def record_sale():
     user_id = session.get('user_id')
     staff_id = session.get('staff_id')  # This will be None for owners
     business_id = session.get('business_id')
+    business_id = get_current_business_id()
     user_role = session.get('role')
     products = Product.query.filter_by(business_id=business_id).all()
 
@@ -793,6 +814,7 @@ def record_sale():
 @login_required
 def expenses():
     user_business_id = session.get('business_id')
+    business_id = get_current_business_id()
     expenses = Expense.query.filter_by(business_id=user_business_id).order_by(Expense.date.desc()).all() # Changed expense_date to date
     return render_template('expenses.html', expenses=expenses, now=datetime.datetime.utcnow())
 
@@ -804,6 +826,7 @@ def add_expense():
     # Determine role and relevant IDs
     role = session.get('role')
     business_id = session.get('business_id')
+    business_id = get_current_business_id()
     user_id = session.get('user_id')         # For owner
     staff_id = session.get('staff_id')       # For staff
 
@@ -862,6 +885,7 @@ def add_expense():
 @app.route('/profile')
 @login_required
 def profile():
+    business_id = get_current_business_id()
     role = session.get('role')
 
     if role == 'owner':
@@ -891,7 +915,8 @@ def profile():
 @app.route('/edit_profile', methods=['GET', 'POST'])
 @login_required 
 def edit_profile():
-    user = User.query.get(session['user_id']) # Changed 'users_id' to 'user_id'
+    user = User.query.get(session['user_id']) 
+    business_id = get_current_business_id()
     if request.method == 'POST':
         new_username = request.form.get('username')
         new_email = request.form.get('email')
@@ -950,7 +975,8 @@ def edit_profile():
 @app.route('/change_password', methods=['GET', 'POST'])
 @login_required 
 def change_password():
-    user = User.query.get(session['user_id']) # Changed 'users_id' to 'user_id'
+    user = User.query.get(session['user_id']) 
+    business_id = get_current_business_id()
     if request.method == 'POST':
         current_password = request.form.get('current_password')
         new_password = request.form.get('new_password')
@@ -994,6 +1020,7 @@ def add_staff():
         return redirect(url_for('dashboard'))
 
     business_id = session.get('business_id')
+    business_id = get_current_business_id()
     current_staff_count = Staff.query.filter_by(business_id=business_id).count()
     staff_limit = 3
 
@@ -1037,6 +1064,7 @@ def add_staff():
 @app.route('/edit_staff/<int:staff_id>', methods=['GET', 'POST'])
 @role_required('owner')
 def edit_staff(staff_id):
+    business_id = get_current_business_id()
     staff_member = Staff.query.get_or_404(staff_id)
 
     if staff_member.business_id != session.get('business_id'):
@@ -1111,6 +1139,7 @@ import datetime
 @role_required('owner') 
 def reports():
     user_business_id = session.get('business_id')
+    business_id = get_current_business_id()
 
     # Default to all time
     start_date_filter = datetime.datetime.min
