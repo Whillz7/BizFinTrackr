@@ -154,6 +154,11 @@ class Inventory(db.Model):
     quantity = db.Column(db.Integer, nullable=False)
     product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False)
     staff_id = db.Column(db.Integer, db.ForeignKey('staff.id'), nullable=True)
+    business_id = db.Column(db.Integer, db.ForeignKey('business.id'), nullable=False)
+
+    product = db.relationship('Product', backref='inventory_logs')
+    staff = db.relationship('Staff', backref='inventory_logs')
+    business = db.relationship('Business', backref='inventory_logs')
 
     def __repr__(self):
         return f"<Inventory(Product ID: {self.product_id}, Quantity: {self.quantity})>"
@@ -557,7 +562,7 @@ def restock_product(product_id):
                 product_id=product.id, 
                 quantity=int(quantity_to_add),
                 staff_id = session.get('staff_id') if session.get('role') == 'staff' else session.get('user_id'), # Changed 'users_id' to 'user_id'
-                # Removed business_id from Inventory creation as it's not in the SQL schema
+                business_id=session['business_id']
             )
             db.session.add(new_inventory_log)
             
@@ -646,7 +651,8 @@ def sell_product():
             inventory_log = Inventory(
                 product_id=product.id,
                 quantity=-quantity,
-                staff_id=staff_id
+                staff_id=staff_id,
+                business_id=session['business_id']
             )
             db.session.add(inventory_log)
 
@@ -759,7 +765,8 @@ def record_sale():
             new_inventory_log = Inventory(
                 product_id=product.id,
                 quantity=-quantity,
-                staff_id=sale_staff_id
+                staff_id=sale_staff_id,
+                business_id=session['business_id']
             )
             db.session.add(new_inventory_log)
 
