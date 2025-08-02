@@ -659,7 +659,7 @@ def sell_product():
             sale = Sale(
                 product_id=product.id,
                 quantity=quantity,
-                total_amount=quantity * price,
+                total_amount= price,
                 business_id=business_id,
                 staff_id=staff_id
             )
