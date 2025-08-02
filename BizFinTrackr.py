@@ -575,12 +575,12 @@ def restock_product(product_id):
         try:
             product.in_stock += int(quantity_to_add)
 
-            staff_id = session.get('staff_id') if session.get('role') == 'staff' else None
+            staff_id = session.get('staff_id') if session.get('role') == 'staff' else ('users_id')
             
             new_inventory_log = Inventory(
                 product_id=product.id, 
                 quantity=int(quantity_to_add),
-                staff_id = session.get('staff_id') if session.get('role') == 'staff' else session.get('user_id'), # Changed 'users_id' to 'user_id'
+                staff_id = session.get('staff_id') if session.get('role') == 'staff' else session.get('users_id'),
                 business_id=session['business_id'],
                 date=datetime.datetime.utcnow()
             )
